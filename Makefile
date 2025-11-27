@@ -47,11 +47,11 @@ terraform-init:
 
 # Run detection engine (once mode)
 run-once:
-	@./bin/iota --mode=once --jsonl=testdata/real-cloudtrail.jsonl --rules=testdata/rules --python=python3 --engine=engines/iota/engine.py
+	@./bin/iota --mode=once --jsonl=testdata/events/test-01.jsonl --rules=rules/aws_cloudtrail --python=python3 --engine=engines/iota/engine.py
 
 # Run detection engine (watch mode)
 run-watch:
-	@./bin/iota --mode=watch --events-dir=./testdata/events --rules=testdata/rules --python=python3 --engine=engines/iota/engine.py
+	@./bin/iota --mode=watch --events-dir=./testdata/events --rules=rules/aws_cloudtrail --python=python3 --engine=engines/iota/engine.py
 
 # Run all checks before commit
 pre-commit: test build
