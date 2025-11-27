@@ -1,0 +1,128 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "iota.fullname" . }}
+  labels:
+    {{- include "iota.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "iota.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "iota.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "iota.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+      {{- if and .Values.initContainers.gitSync.enabled .Values.detection.rules.repo }}
+      - name: git-sync-init
+        image: {{ .Values.initContainers.gitSync.image }}
+        imagePullPolicy: {{ .Values.initContainers.gitSync.imagePullPolicy }}
+        command:
+        - sh
+        - -c
+        - |
+          git clone --depth 1 --branch {{ .Values.detection.rules.branch }} {{ .Values.detection.rules.repo }} /tmp/rules
+          cp -r /tmp/rules/{{ .Values.detection.rules.path }}/* /data/rules/
+        volumeMounts:
+        - name: rules
+          mountPath: /data/rules
+      {{- end }}
+      containers:
+      - name: iota
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - /app/iota
+        args:
+        - --mode={{ .Values.detection.mode }}
+        - --events-dir={{ .Values.detection.eventsDir }}
+        - --rules=/data/rules
+        - --state={{ .Values.detection.stateFile }}
+        - --python={{ .Values.detection.python }}
+        - --engine={{ .Values.detection.enginePath }}
+        {{- if .Values.slack.enabled }}
+        - --slack-webhook=$(SLACK_WEBHOOK_URL)
+        {{- end }}
+        env:
+        {{- if .Values.slack.enabled }}
+        - name: SLACK_WEBHOOK_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.slack.secretName }}
+              key: {{ .Values.slack.secretKey }}
+        {{- end }}
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+        volumeMounts:
+        - name: events
+          mountPath: {{ .Values.detection.eventsDir }}
+          readOnly: true
+        - name: rules
+          mountPath: /data/rules
+          readOnly: true
+        - name: state
+          mountPath: /data/state
+      {{- if .Values.detection.rules.repo }}
+      - name: git-sync
+        image: {{ .Values.initContainers.gitSync.image }}
+        imagePullPolicy: {{ .Values.initContainers.gitSync.imagePullPolicy }}
+        command:
+        - sh
+        - -c
+        - |
+          while true; do
+            cd /tmp/rules || git clone --depth 1 --branch {{ .Values.detection.rules.branch }} {{ .Values.detection.rules.repo }} /tmp/rules
+            cd /tmp/rules
+            git pull origin {{ .Values.detection.rules.branch }}
+            cp -r {{ .Values.detection.rules.path }}/* /data/rules/
+            sleep {{ .Values.detection.rules.syncInterval }}
+          done
+        volumeMounts:
+        - name: rules
+          mountPath: /data/rules
+      {{- end }}
+      volumes:
+      - name: events
+        {{- if .Values.persistence.events.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.persistence.events.existingClaim | default (include "iota.fullname" .) }}-events
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+      - name: rules
+        emptyDir: {}
+      - name: state
+        {{- if .Values.persistence.state.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ include "iota.fullname" . }}-state
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

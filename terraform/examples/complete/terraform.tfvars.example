@@ -1,0 +1,13 @@
+# Copy this file to terraform.tfvars and fill in your values
+
+region            = "us-east-1"
+environment       = "production"
+cluster_name      = "production-eks"
+oidc_provider_arn = "arn:aws:iam::123456789012:oidc-provider/oidc.eks.us-east-1.amazonaws.com/id/EXAMPLE"
+cloudtrail_bucket = "company-cloudtrail-logs"
+
+image_repository  = "123456789012.dkr.ecr.us-east-1.amazonaws.com/iota"
+image_tag         = "v0.1.0"
+
+rules_repo        = "https://github.com/your-org/iota-rules.git"
+slack_webhook_url = "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"

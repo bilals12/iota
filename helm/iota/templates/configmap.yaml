@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "iota.fullname" . }}-config
+  labels:
+    {{- include "iota.labels" . | nindent 4 }}
+data:
+  detection.yaml: |
+    mode: {{ .Values.detection.mode }}
+    python: {{ .Values.detection.python }}
+    enginePath: {{ .Values.detection.enginePath }}
+    eventsDir: {{ .Values.detection.eventsDir }}
+    stateFile: {{ .Values.detection.stateFile }}
+    {{- if .Values.detection.rules.repo }}
+    rules:
+      repo: {{ .Values.detection.rules.repo }}
+      branch: {{ .Values.detection.rules.branch }}
+      path: {{ .Values.detection.rules.path }}
+      syncInterval: {{ .Values.detection.rules.syncInterval }}
+    {{- end }}

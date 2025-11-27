@@ -1,0 +1,53 @@
+# Binaries
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test coverage
+*.out
+coverage.txt
+
+# Go workspace
+go.work
+go.work.sum
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local data
+events/
+testdata/events/
+state.db
+iota.db
+*.log
+demo.sh
+
+# Secrets
+*.pem
+*.key
+config.local.yaml
+.env
+terraform.tfvars
+*secret*
+*token*
+*webhook*
+
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/.terraform.lock.hcl
+
+# Helm
+helm/*.tgz
+helm/iota/charts/

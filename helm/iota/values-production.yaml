@@ -1,0 +1,72 @@
+# Production values for iota
+# This file should be customized for your environment
+
+replicaCount: 2
+
+image:
+  repository: 123456789012.dkr.ecr.us-east-1.amazonaws.com/iota
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/iota-cloudtrail-reader
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9090"
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+detection:
+  mode: watch
+  python: python3
+  enginePath: /app/engines/iota/engine.py
+
+  rules:
+    repo: https://github.com/your-org/iota-rules.git
+    branch: main
+    path: rules
+    syncInterval: 5m
+
+  eventsDir: /data/events
+  stateFile: /data/state/iota.db
+
+slack:
+  enabled: true
+  secretName: iota-slack-webhook
+  secretKey: webhook-url
+
+persistence:
+  events:
+    enabled: true
+    # Share volume with CloudTrail log shipper
+    existingClaim: cloudtrail-events-pvc
+    accessMode: ReadWriteMany
+    size: 100Gi
+
+  state:
+    enabled: true
+    storageClass: gp3
+    accessMode: ReadWriteOnce
+    size: 5Gi
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - iota
+        topologyKey: kubernetes.io/hostname
