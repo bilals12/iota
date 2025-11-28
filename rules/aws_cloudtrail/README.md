@@ -276,7 +276,7 @@ def rule(event):
 
 ### Community Contributions
 
-Ported from [panther-analysis](https://github.com/panther-labs/panther-analysis) open-source detection rules.
+Detection rules for AWS CloudTrail events.
 
 To contribute new rules:
 1. Write the rule following the template above
@@ -292,7 +292,7 @@ To contribute new rules:
 - [ ] Add machine learning anomaly detection
 - [ ] Support custom severity functions
 - [ ] Add automatic remediation actions
-- [x] Port critical CloudTrail rules from panther-analysis (39/107 ported)
+- [x] Critical CloudTrail detection rules (39 rules)
 - [ ] Add Okta detection rules
 - [ ] Add Azure AD detection rules
 - [ ] Add Google Workspace detection rules
@@ -301,5 +301,4 @@ To contribute new rules:
 
 - [AWS CloudTrail Documentation](https://docs.aws.amazon.com/cloudtrail/)
 - [MITRE ATT&CK Cloud Matrix](https://attack.mitre.org/matrices/enterprise/cloud/)
-- [Panther Detection Rules](https://github.com/panther-labs/panther-analysis)
 - [AWS Security Best Practices](https://aws.amazon.com/security/security-resources/)

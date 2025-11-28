@@ -1,5 +1,5 @@
 """
-iota helper functions - simplified versions of Panther helpers for standalone detection
+iota helper functions for standalone detection
 """
 
 

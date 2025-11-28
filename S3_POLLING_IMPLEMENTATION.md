@@ -178,7 +178,7 @@ CREATE TABLE processed_s3_objects (
 
 ## Comparison: S3 Polling vs SNS/SQS
 
-| Aspect             | S3 Polling (iota)         | SNS/SQS (Panther)        |
+| Aspect             | S3 Polling (iota)         | SNS/SQS (Event-Driven)   |
 | ------------------ | ------------------------- | ------------------------ |
 | **Latency**        | 5-10 min                  | 1-2 min                  |
 | **Infrastructure** | None                      | SNS + SQS + Lambda       |
