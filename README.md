@@ -43,8 +43,8 @@ go build -o bin/iota ./cmd/iota
 
 # test with sample data
 ./bin/iota \
-  --jsonl testdata/real-cloudtrail.jsonl \
-  --rules testdata/rules \
+  --jsonl testdata/events/root-login.jsonl \
+  --rules rules/aws_cloudtrail \
   --python python3 \
   --engine engines/iota/engine.py
 ```
@@ -113,12 +113,19 @@ iam policy:
 }
 ```
 
-## writing detection rules
+## detection rules
 
-rules are python files in `testdata/rules/`:
+iota ships with **39 production-grade CloudTrail detection rules** covering all 14 MITRE ATT&CK tactics:
+
+- **4 Critical** severity rules (root access, public snapshots)
+- **18 High** severity rules (IAM backdoors, security logging disabled, data deletion)
+- **15 Medium** severity rules (MFA bypasses, unusual access patterns)
+- **2 Info/Low** severity rules (failed logins, secret access tracking)
+
+rules are python files in `rules/aws_cloudtrail/`:
 
 ```python
-# testdata/rules/root_console_login.py
+# rules/aws_cloudtrail/aws_console_root_login.py
 def rule(event):
     """detect root account console logins"""
     return (
@@ -135,11 +142,13 @@ def severity():
     return "CRITICAL"
 ```
 
+see [rules/aws_cloudtrail/README.md](rules/aws_cloudtrail/README.md) for complete rule catalog.
+
 rule structure:
 - `rule(event)`: returns true if event matches detection logic
 - `title(event)`: returns alert title string
 - `severity()`: returns severity level (INFO, LOW, MEDIUM, HIGH, CRITICAL)
-- `dedup(event)`: optional deduplication key
+- `alert_context(event)`: optional additional context for analysts
 
 ## integration
 
@@ -162,7 +171,7 @@ pull upstream detection rules:
 
 ```bash
 # update rules repo
-cd testdata/rules
+cd rules/aws_cloudtrail
 git pull origin main
 
 # restart iota to reload rules
@@ -176,11 +185,26 @@ or maintain your own fork:
 gh repo fork bilals12/iota
 
 # add your custom rules
-echo "def rule(event): return event.get('eventName') == 'DeleteBucket'" > testdata/rules/my_rule.py
+echo "def rule(event): return event.get('eventName') == 'DeleteBucket'" > rules/aws_cloudtrail/my_rule.py
 
 # deploy your fork
 kubectl set image deployment/iota iota=your-registry/iota:custom
 ```
+
+### threat coverage
+
+rules cover all 14 MITRE ATT&CK tactics:
+- Initial Access (console logins, failed attempts)
+- Persistence (IAM users, EC2 modifications, SSM sessions)
+- Privilege Escalation (admin policy attachments, role assumptions)
+- Defense Evasion (logging disabled, unusual user agents)
+- Credential Access (EC2 user data, secrets access)
+- Discovery (reconnaissance via AccessDenied)
+- Execution (SSM Run Command, Lambda modifications)
+- Lateral Movement (security groups, network ACLs, routes)
+- Collection (logging disabled, user data access)
+- Exfiltration (public snapshots, gateway changes)
+- Impact (data deletion, KMS key deletion)
 
 ## architecture
 

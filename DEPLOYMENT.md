@@ -99,38 +99,47 @@ kubectl logs -n security -l app.kubernetes.io/name=iota -f
 
 ### 1. Prepare Detection Rules Repository
 
-Create a Git repository for your detection rules:
+iota ships with 39 production-grade CloudTrail detection rules in `rules/aws_cloudtrail/`. You can use these directly or create your own Git repository:
 
+**Option A: Use included rules** (recommended for quick start):
+```bash
+# Rules are already in the repository at rules/aws_cloudtrail/
+# Includes 39 rules covering all MITRE ATT&CK cloud tactics
+```
+
+**Option B: Create custom rules repository**:
 ```bash
 mkdir iota-rules
 cd iota-rules
 
-# Create rules directory
-mkdir rules
+# Copy included rules as a starting point
+cp -r /path/to/iota/rules .
 
-# Example rule: S3 bucket access
-cat > rules/s3_bucket_access.py <<'EOF'
+# Or create your own custom rule
+cat > rules/aws_cloudtrail/custom_s3_access.py <<'EOF'
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "helpers"))
+from iota_helpers import deep_get, is_successful, aws_rule_context
+
 def rule(event):
     return (
         event.get("eventSource") == "s3.amazonaws.com"
-        and event.get("eventName") in ["GetBucketAcl", "GetBucketPolicy", "GetBucketLocation"]
+        and event.get("eventName") in ["GetBucketAcl", "GetBucketPolicy"]
     )
 
 def title(event):
-    bucket = event.get("requestParameters", {}).get("bucketName", "unknown")
+    bucket = deep_get(event, "requestParameters", "bucketName", default="unknown")
     return f"S3 bucket access: {event.get('eventName')} on {bucket}"
 
 def severity():
     return "INFO"
-
-def dedup(event):
-    return f"{event.get('userIdentity', {}).get('principalId', 'unknown')}-{event.get('eventName')}"
 EOF
 
 # Commit and push
 git init
 git add .
-git commit -m "Initial rules"
+git commit -m "Initial rules based on iota 39-rule catalog"
 git remote add origin https://github.com/your-org/iota-rules.git
 git push -u origin main
 ```
