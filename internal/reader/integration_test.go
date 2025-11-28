@@ -9,7 +9,7 @@ func TestReaderWithRealCloudTrail(t *testing.T) {
 	r := New()
 	ctx := context.Background()
 
-	events, errs := r.ReadFile(ctx, "../../testdata/real-cloudtrail.jsonl")
+	events, errs := r.ReadFile(ctx, "../../testdata/sample.jsonl")
 
 	var count int
 	for event := range events {

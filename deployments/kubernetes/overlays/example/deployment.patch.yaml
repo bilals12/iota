@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iota
+  namespace: security
+spec:
+  template:
+    spec:
+      containers:
+        - name: iota
+          env:
+            - name: S3_BUCKET
+              value: "your-org-cloudtrail"
+            - name: S3_PREFIX
+              value: "AWSLogs/"
+            - name: POLL_INTERVAL
+              value: "5m"
+            - name: AWS_REGION
+              value: "us-east-1"

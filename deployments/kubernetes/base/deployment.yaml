@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iota
+  namespace: security
+  labels:
+    app: iota
+    app.kubernetes.io/name: iota
+    app.kubernetes.io/component: detection-engine
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: iota
+  template:
+    metadata:
+      labels:
+        app: iota
+        app.kubernetes.io/name: iota
+    spec:
+      serviceAccountName: iota
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: iota
+          image: iota:latest
+          imagePullPolicy: Always
+          command:
+            - /app/iota
+          args:
+            - --mode=s3-poll
+            - --s3-bucket=$(S3_BUCKET)
+            - --s3-prefix=$(S3_PREFIX)
+            - --poll-interval=$(POLL_INTERVAL)
+            - --rules=/app/rules/aws_cloudtrail
+            - --python=python3
+            - --engine=/app/engines/iota/engine.py
+            - --state=/data/state.db
+          env:
+            - name: S3_BUCKET
+              value: "" # Override in overlay
+            - name: S3_PREFIX
+              value: "AWSLogs/" # Common default
+            - name: POLL_INTERVAL
+              value: "5m" # Common default
+            - name: SLACK_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: iota-slack-webhook
+                  key: webhook-url
+                  optional: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          volumeMounts:
+            - name: state
+              mountPath: /data
+            - name: rules
+              mountPath: /app/rules
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: iota-state
+        - name: rules
+          configMap:
+            name: iota-detection-rules
