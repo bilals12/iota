@@ -19,3 +19,23 @@ output "service_account_annotation" {
     "eks.amazonaws.com/role-arn" = aws_iam_role.iota.arn
   }
 }
+
+output "sqs_queue_url" {
+  description = "URL of the SQS queue for CloudTrail notifications"
+  value       = aws_sqs_queue.cloudtrail_notifications.url
+}
+
+output "sqs_queue_arn" {
+  description = "ARN of the SQS queue for CloudTrail notifications"
+  value       = aws_sqs_queue.cloudtrail_notifications.arn
+}
+
+output "sqs_dlq_url" {
+  description = "URL of the SQS dead letter queue"
+  value       = aws_sqs_queue.cloudtrail_notifications_dlq.url
+}
+
+output "sqs_dlq_arn" {
+  description = "ARN of the SQS dead letter queue"
+  value       = aws_sqs_queue.cloudtrail_notifications_dlq.arn
+}

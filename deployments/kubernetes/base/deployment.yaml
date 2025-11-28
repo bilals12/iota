@@ -30,27 +30,50 @@ spec:
           command:
             - /app/iota
           args:
-            - --mode=s3-poll
+            - --mode=sqs
+            - --sqs-queue-url=$(SQS_QUEUE_URL)
             - --s3-bucket=$(S3_BUCKET)
-            - --s3-prefix=$(S3_PREFIX)
-            - --poll-interval=$(POLL_INTERVAL)
+            - --aws-region=$(AWS_REGION)
             - --rules=/app/rules/aws_cloudtrail
             - --python=python3
             - --engine=/app/engines/iota/engine.py
             - --state=/data/state.db
+            - --data-lake-bucket=$(DATA_LAKE_BUCKET)
           env:
+            - name: SQS_QUEUE_URL
+              value: "" # Override in overlay
             - name: S3_BUCKET
               value: "" # Override in overlay
-            - name: S3_PREFIX
-              value: "AWSLogs/" # Common default
-            - name: POLL_INTERVAL
-              value: "5m" # Common default
+            - name: AWS_REGION
+              value: "us-east-1"
+            - name: DATA_LAKE_BUCKET
+              value: "" # Optional, override in overlay if using data lake
             - name: SLACK_WEBHOOK_URL
               valueFrom:
                 secretKeyRef:
                   name: iota-slack-webhook
                   key: webhook-url
                   optional: true
+          ports:
+            - name: health
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
           resources:
             requests:
               cpu: 100m
