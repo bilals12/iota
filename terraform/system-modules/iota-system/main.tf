@@ -95,6 +95,90 @@ resource "aws_iam_role_policy" "cloudtrail_kms_decrypt" {
   })
 }
 
+# SQS Queue for CloudTrail notifications
+resource "aws_sqs_queue" "cloudtrail_notifications" {
+  name                       = var.sqs_queue_name != "" ? var.sqs_queue_name : "${var.cluster_name}-iota-cloudtrail-queue"
+  visibility_timeout_seconds = 300
+  message_retention_seconds  = 345600
+  receive_wait_time_seconds  = 20
+
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.cloudtrail_notifications_dlq.arn
+    maxReceiveCount     = 3
+  })
+
+  tags = merge(
+    var.tags,
+    {
+      Name      = var.sqs_queue_name != "" ? var.sqs_queue_name : "${var.cluster_name}-iota-cloudtrail-queue"
+      ManagedBy = "terraform"
+      Component = "iota"
+    }
+  )
+}
+
+# Dead Letter Queue
+resource "aws_sqs_queue" "cloudtrail_notifications_dlq" {
+  name                      = var.sqs_queue_name != "" ? "${var.sqs_queue_name}-dlq" : "${var.cluster_name}-iota-cloudtrail-queue-dlq"
+  message_retention_seconds = 1209600
+
+  tags = merge(
+    var.tags,
+    {
+      Name      = var.sqs_queue_name != "" ? "${var.sqs_queue_name}-dlq" : "${var.cluster_name}-iota-cloudtrail-queue-dlq"
+      ManagedBy = "terraform"
+      Component = "iota"
+    }
+  )
+}
+
+# SQS Queue Policy for SNS subscription
+resource "aws_sqs_queue_policy" "cloudtrail_notifications" {
+  count     = var.cloudtrail_sns_topic_arn != "" ? 1 : 0
+  queue_url = aws_sqs_queue.cloudtrail_notifications.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "sns.amazonaws.com"
+        }
+        Action   = "sqs:SendMessage"
+        Resource = aws_sqs_queue.cloudtrail_notifications.arn
+        Condition = {
+          ArnEquals = {
+            "aws:SourceArn" = var.cloudtrail_sns_topic_arn
+          }
+        }
+      }
+    ]
+  })
+}
+
+# SQS permissions for iota IAM role
+resource "aws_iam_role_policy" "sqs_access" {
+  name = "sqs-access"
+  role = aws_iam_role.iota.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes",
+          "sqs:GetQueueUrl"
+        ]
+        Resource = aws_sqs_queue.cloudtrail_notifications.arn
+      }
+    ]
+  })
+}
+
 # Optional: SNS subscription for real-time CloudTrail notifications
 resource "aws_iam_role_policy" "cloudtrail_sns_subscribe" {
   count = var.enable_sns_notifications ? 1 : 0

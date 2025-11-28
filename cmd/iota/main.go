@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/bilals12/iota/internal/alerts"
+	"github.com/bilals12/iota/internal/api"
 	"github.com/bilals12/iota/internal/engine"
 	"github.com/bilals12/iota/internal/reader"
 	"github.com/bilals12/iota/internal/s3poller"
@@ -81,6 +82,16 @@ func run() error {
 		if *sqsQueueURL == "" {
 			return fmt.Errorf("sqs-queue-url flag is required in sqs mode")
 		}
+		healthPort := os.Getenv("HEALTH_PORT")
+		if healthPort == "" {
+			healthPort = "8080"
+		}
+		healthServer := api.NewHealthServer(healthPort)
+		go func() {
+			if err := healthServer.Start(ctx); err != nil {
+				log.Printf("health server error: %v", err)
+			}
+		}()
 		return runSQS(ctx, *sqsQueueURL, *s3Bucket, *awsRegion, *rulesDir, *python, *enginePy, *stateFile, *dataLakeBucket, slackClient)
 	default:
 		return fmt.Errorf("invalid mode: %s (must be once, watch, s3-poll, or sqs)", *mode)

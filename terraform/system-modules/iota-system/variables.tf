@@ -42,6 +42,12 @@ variable "enable_sns_notifications" {
   default     = false
 }
 
+variable "sqs_queue_name" {
+  description = "Name for SQS queue (optional, defaults to cluster-name-iota-cloudtrail-queue)"
+  type        = string
+  default     = ""
+}
+
 variable "tags" {
   description = "Additional tags to apply to all resources"
   type        = map(string)
