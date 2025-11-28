@@ -44,6 +44,22 @@ func (r *Reader) ReadFile(ctx context.Context, path string) (<-chan *cloudtrail.
 	return events, errs
 }
 
+func (r *Reader) Read(ctx context.Context, reader io.Reader) (<-chan *cloudtrail.Event, <-chan error) {
+	events := make(chan *cloudtrail.Event, 100)
+	errs := make(chan error, 1)
+
+	go func() {
+		defer close(events)
+		defer close(errs)
+
+		if err := r.read(ctx, reader, events); err != nil {
+			errs <- err
+		}
+	}()
+
+	return events, errs
+}
+
 func (r *Reader) read(ctx context.Context, reader io.Reader, events chan<- *cloudtrail.Event) error {
 	scanner := bufio.NewScanner(reader)
 	buf := make([]byte, 0, r.maxLineSize)

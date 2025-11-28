@@ -5,14 +5,17 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/bilals12/iota/internal/alerts"
 	"github.com/bilals12/iota/internal/engine"
 	"github.com/bilals12/iota/internal/reader"
+	"github.com/bilals12/iota/internal/s3poller"
 	"github.com/bilals12/iota/internal/watcher"
 	"github.com/bilals12/iota/pkg/cloudtrail"
 )
@@ -26,9 +29,13 @@ func main() {
 
 func run() error {
 	var (
-		mode         = flag.String("mode", "once", "mode: once or watch")
+		mode         = flag.String("mode", "once", "mode: once, watch, or s3-poll")
 		jsonlFile    = flag.String("jsonl", "", "path to jsonl file (once mode)")
 		eventsDir    = flag.String("events-dir", "", "path to events directory (watch mode)")
+		s3Bucket     = flag.String("s3-bucket", "", "S3 bucket name (s3-poll mode)")
+		s3Prefix     = flag.String("s3-prefix", "AWSLogs/", "S3 prefix (s3-poll mode)")
+		pollInterval = flag.String("poll-interval", "5m", "polling interval (s3-poll mode)")
+		awsRegion    = flag.String("aws-region", "us-east-1", "AWS region")
 		rulesDir     = flag.String("rules", "", "path to rules directory")
 		python       = flag.String("python", "python3", "python executable path")
 		enginePy     = flag.String("engine", "engines/iota/engine.py", "path to engine.py")
@@ -62,8 +69,14 @@ func run() error {
 		return runOnce(ctx, *jsonlFile, *rulesDir, *python, *enginePy, slackClient)
 	case "watch":
 		return runWatch(ctx, *eventsDir, *rulesDir, *python, *enginePy, *stateFile, slackClient)
+	case "s3-poll":
+		interval, err := time.ParseDuration(*pollInterval)
+		if err != nil {
+			return fmt.Errorf("invalid poll-interval: %w", err)
+		}
+		return runS3Poll(ctx, *s3Bucket, *s3Prefix, *awsRegion, interval, *rulesDir, *python, *enginePy, *stateFile, slackClient)
 	default:
-		return fmt.Errorf("invalid mode: %s (must be once or watch)", *mode)
+		return fmt.Errorf("invalid mode: %s (must be once, watch, or s3-poll)", *mode)
 	}
 }
 
@@ -150,6 +163,65 @@ func runWatch(ctx context.Context, eventsDir, rulesDir, python, enginePy, stateF
 
 	log.Println("watcher started, press ctrl+c to stop")
 	return w.Watch(ctx)
+}
+
+func runS3Poll(ctx context.Context, bucket, prefix, region string, interval time.Duration, rulesDir, python, enginePy, stateFile string, slackClient *alerts.SlackClient) error {
+	if bucket == "" {
+		return fmt.Errorf("s3-bucket flag is required in s3-poll mode")
+	}
+
+	log.Printf("starting S3 poller: bucket=%s prefix=%s interval=%v", bucket, prefix, interval)
+
+	eng := engine.New(python, enginePy, rulesDir)
+	r := reader.New()
+
+	// Handler function that processes CloudTrail JSON from S3
+	handler := func(ioReader io.Reader) error {
+		events, errs := r.Read(ctx, ioReader)
+
+		var batch []*cloudtrail.Event
+		for event := range events {
+			batch = append(batch, event)
+		}
+
+		if err := <-errs; err != nil {
+			return fmt.Errorf("read events: %w", err)
+		}
+
+		if len(batch) == 0 {
+			return nil
+		}
+
+		matches, err := eng.Analyze(ctx, batch)
+		if err != nil {
+			return fmt.Errorf("analyze: %w", err)
+		}
+
+		for _, match := range matches {
+			if err := handleAlert(match, slackClient); err != nil {
+				log.Printf("error handling alert: %v", err)
+			}
+		}
+
+		log.Printf("processed %d events, %d matches", len(batch), len(matches))
+		return nil
+	}
+
+	poller, err := s3poller.New(ctx, s3poller.Config{
+		Bucket:   bucket,
+		Prefix:   prefix,
+		StateFile: stateFile,
+		Handler:  handler,
+		Interval: interval,
+		Region:   region,
+	})
+	if err != nil {
+		return fmt.Errorf("create S3 poller: %w", err)
+	}
+	defer poller.Close()
+
+	log.Println("S3 poller started, press ctrl+c to stop")
+	return poller.Poll(ctx)
 }
 
 func handleAlert(match engine.Match, slackClient *alerts.SlackClient) error {

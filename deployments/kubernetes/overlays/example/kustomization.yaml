@@ -1,0 +1,28 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: security
+
+resources:
+  - ../../base
+
+# Patch ServiceAccount with your IRSA role
+patchesStrategicMerge:
+  - serviceaccount.patch.yaml
+  - deployment.patch.yaml
+
+# Generate secret for Slack webhook
+# Instructions: Use sealed-secrets to encrypt the webhook URL
+# kubectl create secret generic iota-slack-webhook \
+#   --from-literal=webhook-url=https://hooks.slack.com/... \
+#   --dry-run=client -o yaml | \
+#   kubeseal --format=yaml > iota-slack-sealed-secret.yaml
+secretGenerator:
+  - name: iota-slack-webhook
+    literals:
+      - webhook-url=PLACEHOLDER # Replace with real webhook or use sealed secret
+
+images:
+  - name: iota
+    newName: YOUR_AWS_ACCOUNT.dkr.ecr.us-east-1.amazonaws.com/iota # Replace with actual ECR URL
+    newTag: v0.1.0
