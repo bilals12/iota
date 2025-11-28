@@ -8,10 +8,11 @@ iota is a self-hosted CloudTrail detection engine with enterprise-grade log proc
 
 ### Event-Driven Processing
 
-- S3 → SNS Topic → SQS Queue → Log Processor → Data Lake → Rules Engine → Alerts
+- S3 → S3 Notifications → SNS Topic → SQS Queue → Log Processor → Data Lake → Rules Engine → Alerts
 - Real-time processing with sub-minute latency
 - Dead letter queue for failed messages
-- Long polling for efficient message retrieval
+- Long polling (20 seconds) for efficient message retrieval
+- Health check endpoints for Kubernetes liveness/readiness probes
 
 ## Core Components
 
@@ -54,18 +55,19 @@ iota is a self-hosted CloudTrail detection engine with enterprise-grade log proc
 ## Data Flow
 
 ```
-CloudTrail S3 → S3 Poller → Log Processor → Data Lake (S3)
-                                              ↓
-                                    Rules Engine → Deduplication → Alert Forwarder → Outputs
+CloudTrail S3 → S3 Notifications → SNS Topic → SQS Queue → Log Processor → Data Lake (S3)
+                                                                              ↓
+                                                                    Rules Engine → Deduplication → Alert Forwarder → Outputs
 ```
 
 ## Key Design Decisions
 
 1. **SQLite over DynamoDB**: Simpler, no additional AWS service, sufficient for single-account deployments
-2. **S3 Polling over SNS/SQS**: Simpler architecture, acceptable 5-minute latency
+2. **SNS/SQS over S3 Polling**: Event-driven architecture for real-time processing with sub-minute latency
 3. **Optional Data Lake**: Can disable if storage costs are a concern
 4. **CLI-only**: No frontend complexity, integrates with existing tooling
 5. **Self-hosted**: Full control, no vendor lock-in, no per-GB costs
+6. **Health Check Endpoints**: HTTP endpoints for Kubernetes liveness/readiness probes
 
 ## Performance
 
@@ -87,6 +89,8 @@ CloudTrail S3 → S3 Poller → Log Processor → Data Lake (S3)
 - **Compute**: EKS, ECS, Fargate, or EC2
 - **Storage**: SQLite (local or shared volume), S3 (optional data lake)
 - **Network**: VPC with optional egress for alerts
-- **Permissions**: S3 read access to CloudTrail bucket
+- **Permissions**: S3 read access to CloudTrail bucket, SQS receive/delete messages, KMS decrypt
+- **Infrastructure**: Terraform module available for SQS queue, IAM roles, and SNS subscriptions
+- **Health Checks**: HTTP endpoints on port 8080 (`/health` and `/ready`)
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
