@@ -16,15 +16,18 @@ iota gives you:
 ## how it works
 
 ```
-cloudtrail (s3) → iota s3 poller → log processor → data lake (s3) → rules engine → deduplication → alert forwarder → alerts
+cloudtrail (s3) → s3 notifications → sns topic → sqs queue → iota processor → log processor → data lake (s3) → rules engine → deduplication → alert forwarder → alerts
 ```
 
-1. **iota** polls s3 for cloudtrail logs (or uses gocloudtrail jsonl files)
-2. **log processor** classifies and normalizes events
-3. **data lake** stores processed events in s3 with partitioning (optional)
-4. **rules engine** executes python detection rules
-5. **deduplication** prevents alert fatigue
-6. **alert forwarder** routes alerts to slack, stdout, or other outputs
+1. **cloudtrail** writes logs to s3 bucket
+2. **s3 notifications** trigger sns topic on new object creation
+3. **sns → sqs** delivers notifications to sqs queue
+4. **iota sqs processor** receives notifications and downloads log files
+5. **log processor** classifies and normalizes events
+6. **data lake** stores processed events in s3 with partitioning (optional)
+7. **rules engine** executes python detection rules
+8. **deduplication** prevents alert fatigue
+9. **alert forwarder** routes alerts to slack, stdout, or other outputs
 
 ## quick start
 
@@ -58,9 +61,9 @@ go build -o bin/iota ./cmd/iota
 iota runs in your aws environment:
 
 **compute**: eks, ecs, fargate, or ec2
-**permissions**: s3 read access to cloudtrail bucket
+**permissions**: s3 read access to cloudtrail bucket, sqs receive/delete messages
 **network**: vpc with egress to alert destinations
-**storage**: local disk for rule cache and alert queue
+**storage**: local disk for state database and alert deduplication
 
 example eks deployment:
 
@@ -78,22 +81,45 @@ spec:
         - name: iota
           image: your-registry/iota:latest
           command:
-            - /iota
-            - watch
-            - --events-dir=/data/events
-            - --rules=/rules
+            - /app/iota
+          args:
+            - --mode=sqs
+            - --sqs-queue-url=$(SQS_QUEUE_URL)
+            - --s3-bucket=$(S3_BUCKET)
+            - --aws-region=$(AWS_REGION)
+            - --rules=/app/rules/aws_cloudtrail
+            - --state=/data/state.db
+          env:
+            - name: SQS_QUEUE_URL
+              value: "https://sqs.us-east-1.amazonaws.com/123456789012/iota-cloudtrail-queue"
+            - name: S3_BUCKET
+              value: "your-cloudtrail-bucket"
+            - name: AWS_REGION
+              value: "us-east-1"
+          ports:
+            - name: health
+              containerPort: 8080
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
           volumeMounts:
-            - name: events
-              mountPath: /data/events
+            - name: state
+              mountPath: /data
             - name: rules
-              mountPath: /rules
+              mountPath: /app/rules
+              readOnly: true
       volumes:
-        - name: events
+        - name: state
           persistentVolumeClaim:
-            claimName: gocloudtrail-output
+            claimName: iota-state
         - name: rules
           configMap:
-            name: detection-rules
+            name: iota-detection-rules
 ```
 
 iam policy:
@@ -109,6 +135,21 @@ iam policy:
         "arn:aws:s3:::your-cloudtrail-bucket",
         "arn:aws:s3:::your-cloudtrail-bucket/*"
       ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "sqs:ReceiveMessage",
+        "sqs:DeleteMessage",
+        "sqs:GetQueueAttributes",
+        "sqs:GetQueueUrl"
+      ],
+      "Resource": "arn:aws:sqs:us-east-1:123456789012:iota-cloudtrail-queue"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["kms:Decrypt", "kms:DescribeKey"],
+      "Resource": "arn:aws:kms:us-east-1:123456789012:key/your-kms-key-id"
     }
   ]
 }
@@ -254,8 +295,8 @@ mit license. see LICENSE file.
 
 ---
 
-**status**: beta - core detection engine working, data lake and deduplication implemented
+**status**: beta - core detection engine working, event-driven processing with SNS/SQS, data lake and deduplication implemented
 
-**architecture**: event-driven processing with SNS/SQS pipeline
+**architecture**: event-driven processing with SNS/SQS pipeline, health check endpoints, terraform module for infrastructure
 
 **compatibility**: tested with aws cloudtrail (organization trails, single account trails, s3 event format)

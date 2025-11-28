@@ -17,8 +17,9 @@ iota is a self-hosted CloudTrail detection engine with enterprise-grade architec
 ┌─────────────────────────────────────────────────────────────┐
 │  Ingestion: Event-Driven (SNS/SQS)                          │
 │  • S3 bucket notifications → SNS Topic                      │
-│  • SNS Topic → SQS Queue                                    │
-│  • SQS Queue → Log Processor                                │
+│  • SNS Topic → SQS Queue (with DLQ)                         │
+│  • SQS Queue → iota SQS Processor                           │
+│  • Downloads .json.gz files from S3                         │
 └───────────────────────┬─────────────────────────────────────┘
                         │
                         ▼
@@ -70,6 +71,14 @@ iota is a self-hosted CloudTrail detection engine with enterprise-grade architec
 │  • Slack webhook                                            │
 │  • JSON stdout (for piping to other tools)                 │
 │  • Extensible output interface                             │
+└───────────────────────┬─────────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Health Check Server (internal/api)                         │
+│  • HTTP server on port 8080                                │
+│  • /health endpoint (liveness probe)                       │
+│  • /ready endpoint (readiness probe)                       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -288,53 +297,81 @@ type Match struct {
 }
 ```
 
-### 7. S3 Poller (internal/s3poller)
+### 7. SQS Processor (internal/events)
 
-Polls S3 bucket for new CloudTrail log files.
+Processes SQS messages containing S3 event notifications.
 
 **Features**:
-- Configurable polling interval (default: 5 minutes)
-- ETag-based state tracking
-- SQLite state database
-- Automatic gzip decompression
-- Pagination support for large buckets
+- Long polling (20 seconds) for efficient message retrieval
+- Parses SNS messages containing S3 notifications
+- Downloads CloudTrail log files from S3
+- Automatic message deletion after successful processing
+- Dead letter queue support for failed messages
 
 **Key Types**:
 ```go
-type S3Poller struct {
-    client   *s3.Client
-    bucket   string
-    prefix   string
-    db       *sql.DB
-    handler  func(io.Reader) error
-    interval time.Duration
+type SQSProcessor struct {
+    client      *sqs.Client
+    queueURL    string
+    handler     func(ctx context.Context, s3Bucket, s3Key string) error
+    maxMessages int32
+    waitTime    int32
 }
+```
+
+### 8. Health Check Server (internal/api)
+
+Provides HTTP endpoints for Kubernetes health checks.
+
+**Features**:
+- `/health` endpoint for liveness probes
+- `/ready` endpoint for readiness probes
+- Graceful shutdown on context cancellation
+- Configurable port (default: 8080)
+
+**Key Types**:
+```go
+type HealthServer struct {
+    server *http.Server
+}
+
+func NewHealthServer(port string) *HealthServer
+func (s *HealthServer) Start(ctx context.Context) error
 ```
 
 ## Data Flow
 
 ### Complete Processing Pipeline
 
-1. **S3 Polling**: Polls S3 bucket every 5 minutes (configurable)
-2. **Download**: Downloads new `.json.gz` files
-3. **Log Processing**: Decompresses and parses CloudTrail JSON
-4. **Classification**: Classifies events by service (AWS.CloudTrail, AWS.S3, etc.)
-5. **Data Lake**: Writes processed events to S3 with partitioning
-6. **Rules Engine**: Executes Python detection rules
-7. **Deduplication**: Checks for existing alerts within dedup period
-8. **Alert Forwarding**: Routes alerts to configured outputs
-9. **Delivery**: Sends alerts to Slack, stdout, or other destinations
+1. **S3 Notifications**: CloudTrail writes logs to S3, triggering bucket notifications
+2. **SNS Topic**: S3 notifications published to SNS topic
+3. **SQS Queue**: SNS messages delivered to SQS queue (with DLQ for failures)
+4. **SQS Processing**: iota receives SQS messages and extracts S3 bucket/key
+5. **Download**: Downloads `.json.gz` files from S3
+6. **Log Processing**: Decompresses and parses CloudTrail JSON
+7. **Classification**: Classifies events by service (AWS.CloudTrail, AWS.S3, etc.)
+8. **Data Lake**: Writes processed events to S3 with partitioning (optional)
+9. **Rules Engine**: Executes Python detection rules
+10. **Deduplication**: Checks for existing alerts within dedup period
+11. **Alert Forwarding**: Routes alerts to configured outputs
+12. **Delivery**: Sends alerts to Slack, stdout, or other destinations
+13. **Health Checks**: HTTP endpoints available for Kubernetes probes
 
 ## Deployment Model
 
 iota is self-hosted and runs in your AWS environment:
 
 **Compute**: EKS pod, ECS task, Fargate container, or EC2 instance
-**Permissions**: IAM role with S3 read access to CloudTrail bucket
+**Permissions**: IAM role with:
+- S3 read access to CloudTrail bucket
+- SQS receive/delete message permissions
+- KMS decrypt permissions for encrypted logs
 **Network**: VPC with optional egress to alert destinations
 **Storage**:
 - SQLite databases for state and deduplication
 - S3 bucket for processed data lake (optional)
+**Infrastructure**: Terraform module for SQS queue, IAM roles, and SNS subscriptions
+**Health Monitoring**: HTTP endpoints on port 8080 for Kubernetes probes
 
 ## Security Boundaries
 
@@ -364,19 +401,22 @@ iota is self-hosted and runs in your AWS environment:
 
 ## Design Decisions
 
-- **Event-Driven**: SNS/SQS for real-time processing instead of polling
+- **Event-Driven**: SNS/SQS for real-time processing with sub-minute latency
 - **SQLite**: Simple state management without additional AWS services
 - **Self-Hosted**: Full control, no vendor lock-in, no per-GB costs
 - **CLI-Only**: Integrates with existing tooling, no frontend complexity
+- **Health Checks**: HTTP endpoints for Kubernetes liveness/readiness probes
+- **Terraform Module**: Infrastructure as code for SQS, IAM, and SNS setup
 
 ## Future Enhancements
 
 - **Glue Catalog Integration**: Automatic table creation and partition management
 - **Athena Queries**: Query processed data lake via Athena
 - **Multiple Outputs**: PagerDuty, webhooks, custom integrations
-- **Event-Driven Mode**: SNS/SQS for real-time processing
 - **Health Monitoring**: CloudWatch metrics and alarms
 - **Cross-Account Support**: Assume role for multi-account setups
+- **Adaptive Classifier**: Multi-log source support with penalty-based parser selection
+- **Multi-Account Support**: Cross-account IAM role assumption
 
 ## References
 
