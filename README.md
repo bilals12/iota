@@ -7,6 +7,7 @@ self-hosted cloudtrail detection engine. runs entirely within your aws account. 
 stuck with legacy siems that can't keep up? tired of paying per-gb for detection-as-a-service? need full control over your security detections?
 
 iota gives you:
+
 - **data sovereignty**: logs never leave your control boundary
 - **auditability**: open source, verify no phone-home behavior
 - **customization**: modify detection rules without vendor release cycles
@@ -15,12 +16,15 @@ iota gives you:
 ## how it works
 
 ```
-cloudtrail (s3) → gocloudtrail → jsonl files → iota → alerts (slack/pagerduty/siem)
+cloudtrail (s3) → iota s3 poller → log processor → data lake (s3) → rules engine → deduplication → alert forwarder → alerts
 ```
 
-1. **gocloudtrail** ingests cloudtrail logs from s3, outputs jsonl
-2. **iota** reads jsonl, executes python detection rules, generates alerts
-3. alerts route to your existing tools (slack, pagerduty, wiz, etc)
+1. **iota** polls s3 for cloudtrail logs (or uses gocloudtrail jsonl files)
+2. **log processor** classifies and normalizes events
+3. **data lake** stores processed events in s3 with partitioning (optional)
+4. **rules engine** executes python detection rules
+5. **deduplication** prevents alert fatigue
+6. **alert forwarder** routes alerts to slack, stdout, or other outputs
 
 ## quick start
 
@@ -71,25 +75,25 @@ spec:
     spec:
       serviceAccountName: iota
       containers:
-      - name: iota
-        image: your-registry/iota:latest
-        command:
-        - /iota
-        - watch
-        - --events-dir=/data/events
-        - --rules=/rules
-        volumeMounts:
-        - name: events
-          mountPath: /data/events
-        - name: rules
-          mountPath: /rules
+        - name: iota
+          image: your-registry/iota:latest
+          command:
+            - /iota
+            - watch
+            - --events-dir=/data/events
+            - --rules=/rules
+          volumeMounts:
+            - name: events
+              mountPath: /data/events
+            - name: rules
+              mountPath: /rules
       volumes:
-      - name: events
-        persistentVolumeClaim:
-          claimName: gocloudtrail-output
-      - name: rules
-        configMap:
-          name: detection-rules
+        - name: events
+          persistentVolumeClaim:
+            claimName: gocloudtrail-output
+        - name: rules
+          configMap:
+            name: detection-rules
 ```
 
 iam policy:
@@ -100,10 +104,7 @@ iam policy:
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": [
-        "s3:GetObject",
-        "s3:ListBucket"
-      ],
+      "Action": ["s3:GetObject", "s3:ListBucket"],
       "Resource": [
         "arn:aws:s3:::your-cloudtrail-bucket",
         "arn:aws:s3:::your-cloudtrail-bucket/*"
@@ -145,6 +146,7 @@ def severity():
 see [rules/aws_cloudtrail/README.md](rules/aws_cloudtrail/README.md) for complete rule catalog.
 
 rule structure:
+
 - `rule(event)`: returns true if event matches detection logic
 - `title(event)`: returns alert title string
 - `severity()`: returns severity level (INFO, LOW, MEDIUM, HIGH, CRITICAL)
@@ -194,6 +196,7 @@ kubectl set image deployment/iota iota=your-registry/iota:custom
 ### threat coverage
 
 rules cover all 14 MITRE ATT&CK tactics:
+
 - Initial Access (console logins, failed attempts)
 - Persistence (IAM users, EC2 modifications, SSM sessions)
 - Privilege Escalation (admin policy attachments, role assumptions)
@@ -211,6 +214,7 @@ rules cover all 14 MITRE ATT&CK tactics:
 see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture.
 
 key components:
+
 - **reader**: streams jsonl cloudtrail events
 - **engine**: orchestrates python rule execution
 - **rules**: python detection logic
@@ -250,6 +254,8 @@ mit license. see LICENSE file.
 
 ---
 
-**status**: alpha - core detection engine working, alert routing in development
+**status**: beta - core detection engine working, data lake and deduplication implemented
+
+**architecture**: event-driven processing with SNS/SQS pipeline
 
 **compatibility**: tested with aws cloudtrail (organization trails, single account trails, s3 event format)

@@ -8,6 +8,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.40.0
 	github.com/aws/aws-sdk-go-v2/config v1.32.2
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.92.1
+	github.com/aws/aws-sdk-go-v2/service/sqs v1.42.17
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/mattn/go-sqlite3 v1.14.22
 )

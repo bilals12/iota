@@ -74,7 +74,7 @@ func (s *SlackClient) SendAlert(match engine.Match) error {
 }
 
 func (s *SlackClient) formatMessage(match engine.Match) slackMessage {
-	color := severityColor(match.Severity)
+	color := getSeverityColor(match.Severity)
 
 	return slackMessage{
 		Attachments: []slackAttachment{
@@ -134,7 +134,7 @@ func (s *SlackClient) formatMessage(match engine.Match) slackMessage {
 	}
 }
 
-func severityColor(severity string) string {
+func getSeverityColor(severity string) string {
 	switch severity {
 	case "CRITICAL":
 		return "#d32f2f"

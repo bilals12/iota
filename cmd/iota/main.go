@@ -29,11 +29,12 @@ func main() {
 
 func run() error {
 	var (
-		mode         = flag.String("mode", "once", "mode: once, watch, or s3-poll")
+		mode         = flag.String("mode", "sqs", "mode: once, watch, s3-poll, or sqs")
 		jsonlFile    = flag.String("jsonl", "", "path to jsonl file (once mode)")
 		eventsDir    = flag.String("events-dir", "", "path to events directory (watch mode)")
-		s3Bucket     = flag.String("s3-bucket", "", "S3 bucket name (s3-poll mode)")
+		s3Bucket     = flag.String("s3-bucket", "", "S3 bucket name (s3-poll or sqs mode)")
 		s3Prefix     = flag.String("s3-prefix", "AWSLogs/", "S3 prefix (s3-poll mode)")
+		sqsQueueURL  = flag.String("sqs-queue-url", "", "SQS queue URL (sqs mode)")
 		pollInterval = flag.String("poll-interval", "5m", "polling interval (s3-poll mode)")
 		awsRegion    = flag.String("aws-region", "us-east-1", "AWS region")
 		rulesDir     = flag.String("rules", "", "path to rules directory")
@@ -41,6 +42,7 @@ func run() error {
 		enginePy     = flag.String("engine", "engines/iota/engine.py", "path to engine.py")
 		stateFile    = flag.String("state", "iota.db", "path to state database")
 		slackWebhook = flag.String("slack-webhook", "", "slack webhook url for alerts")
+		dataLakeBucket = flag.String("data-lake-bucket", "", "S3 bucket for processed data lake (optional)")
 	)
 	flag.Parse()
 
@@ -75,8 +77,13 @@ func run() error {
 			return fmt.Errorf("invalid poll-interval: %w", err)
 		}
 		return runS3Poll(ctx, *s3Bucket, *s3Prefix, *awsRegion, interval, *rulesDir, *python, *enginePy, *stateFile, slackClient)
+	case "sqs":
+		if *sqsQueueURL == "" {
+			return fmt.Errorf("sqs-queue-url flag is required in sqs mode")
+		}
+		return runSQS(ctx, *sqsQueueURL, *s3Bucket, *awsRegion, *rulesDir, *python, *enginePy, *stateFile, *dataLakeBucket, slackClient)
 	default:
-		return fmt.Errorf("invalid mode: %s (must be once, watch, or s3-poll)", *mode)
+		return fmt.Errorf("invalid mode: %s (must be once, watch, s3-poll, or sqs)", *mode)
 	}
 }
 
