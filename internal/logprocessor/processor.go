@@ -9,12 +9,14 @@ import (
 	"io"
 	"time"
 
+	"github.com/bilals12/iota/internal/bloom"
 	"github.com/bilals12/iota/internal/logprocessor/parsers"
 	"github.com/bilals12/iota/pkg/cloudtrail"
 )
 
 type Processor struct {
 	adaptiveClassifier *AdaptiveClassifier
+	bloomFilter        *bloom.Filter
 }
 
 type ProcessedEvent struct {
@@ -29,6 +31,14 @@ func New() *Processor {
 	parserMap := getParsers()
 	return &Processor{
 		adaptiveClassifier: NewAdaptiveClassifier(parserMap),
+	}
+}
+
+func NewWithBloomFilter(bloomFilter *bloom.Filter) *Processor {
+	parserMap := getParsers()
+	return &Processor{
+		adaptiveClassifier: NewAdaptiveClassifier(parserMap),
+		bloomFilter:        bloomFilter,
 	}
 }
 
@@ -92,6 +102,13 @@ func (p *Processor) processCloudTrailRecords(ctx context.Context, records []json
 		}
 
 		for _, event := range result.Events {
+			if p.bloomFilter != nil {
+				if p.bloomFilter.Test([]byte(event.EventID)) {
+					continue
+				}
+				p.bloomFilter.Add([]byte(event.EventID))
+			}
+
 			now := time.Now()
 			processed := &ProcessedEvent{
 				Event:     event,
@@ -131,6 +148,13 @@ func (p *Processor) processLineByLine(ctx context.Context, data []byte, events c
 		}
 
 		for _, event := range result.Events {
+			if p.bloomFilter != nil {
+				if p.bloomFilter.Test([]byte(event.EventID)) {
+					continue
+				}
+				p.bloomFilter.Add([]byte(event.EventID))
+			}
+
 			now := time.Now()
 			processed := &ProcessedEvent{
 				Event:     event,

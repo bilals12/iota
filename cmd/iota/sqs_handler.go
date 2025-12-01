@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/bilals12/iota/internal/alerts"
 	"github.com/bilals12/iota/internal/alertforwarder"
+	"github.com/bilals12/iota/internal/bloom"
 	"github.com/bilals12/iota/internal/datalake"
 	"github.com/bilals12/iota/internal/deduplication"
 	"github.com/bilals12/iota/internal/engine"
@@ -21,7 +22,7 @@ import (
 	"time"
 )
 
-func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, enginePy, stateFile, dataLakeBucket string, slackClient *alerts.SlackClient) error {
+func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, enginePy, stateFile, dataLakeBucket, bloomFile string, bloomExpectedItems uint64, bloomFalsePositive float64, downloadWorkers, processWorkers int, slackClient *alerts.SlackClient) error {
 	log.Printf("starting SQS processor: queue=%s", queueURL)
 
 	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
@@ -39,7 +40,27 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 	defer stateDB.Close()
 
 	eng := engine.New(python, enginePy, rulesDir)
-	processor := logprocessor.New()
+
+	var bloomFilter *bloom.Filter
+	if bloomFile != "" {
+		var err error
+		bloomFilter, err = bloom.Load(bloomFile, uint(bloomExpectedItems), bloomFalsePositive)
+		if err != nil {
+			return fmt.Errorf("load bloom filter: %w", err)
+		}
+		defer func() {
+			if err := bloomFilter.Save(); err != nil {
+				log.Printf("warning: failed to save bloom filter: %v", err)
+			}
+		}()
+	}
+
+	var processor *logprocessor.Processor
+	if bloomFilter != nil {
+		processor = logprocessor.NewWithBloomFilter(bloomFilter)
+	} else {
+		processor = logprocessor.New()
+	}
 
 	dedup, err := deduplication.New(stateFile)
 	if err != nil {
