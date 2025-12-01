@@ -45,6 +45,11 @@ func run() error {
 		stateFile    = flag.String("state", "iota.db", "path to state database")
 		slackWebhook = flag.String("slack-webhook", "", "slack webhook url for alerts")
 		dataLakeBucket = flag.String("data-lake-bucket", "", "S3 bucket for processed data lake (optional)")
+		bloomFile    = flag.String("bloom-file", "", "path to bloom filter file for deduplication (optional)")
+		bloomExpectedItems = flag.Uint64("bloom-expected-items", 10000000, "expected number of items for bloom filter")
+		bloomFalsePositive = flag.Float64("bloom-false-positive", 0.001, "false positive rate for bloom filter (0.0-1.0)")
+		downloadWorkers = flag.Int("download-workers", 5, "number of parallel download workers")
+		processWorkers  = flag.Int("process-workers", 10, "number of parallel process workers")
 	)
 	flag.Parse()
 
@@ -93,7 +98,7 @@ func run() error {
 				log.Printf("health server error: %v", err)
 			}
 		}()
-		return runSQS(ctx, *sqsQueueURL, *s3Bucket, *awsRegion, *rulesDir, *python, *enginePy, *stateFile, *dataLakeBucket, slackClient)
+		return runSQS(ctx, *sqsQueueURL, *s3Bucket, *awsRegion, *rulesDir, *python, *enginePy, *stateFile, *dataLakeBucket, *bloomFile, *bloomExpectedItems, *bloomFalsePositive, *downloadWorkers, *processWorkers, slackClient)
 	default:
 		return fmt.Errorf("invalid mode: %s (must be once, watch, s3-poll, or sqs)", *mode)
 	}
