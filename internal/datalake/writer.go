@@ -21,6 +21,12 @@ type Writer struct {
 	buffer    *EventBuffer
 	maxSize   int
 	maxAge    time.Duration
+	glueCatalog interface {
+		EnsureDatabase(ctx context.Context) error
+		CreateTable(ctx context.Context, logType string) error
+		AddPartition(ctx context.Context, logType string, year, month, day, hour int) error
+	}
+	seenLogTypes map[string]bool
 }
 
 type EventBuffer struct {
@@ -33,11 +39,28 @@ type EventBuffer struct {
 
 func New(s3Client *s3.Client, bucket string, maxSize int, maxAge time.Duration) *Writer {
 	return &Writer{
-		s3Client: s3Client,
-		bucket:   bucket,
-		maxSize:  maxSize,
-		maxAge:   maxAge,
-		buffer:   nil,
+		s3Client:     s3Client,
+		bucket:       bucket,
+		maxSize:      maxSize,
+		maxAge:       maxAge,
+		buffer:       nil,
+		seenLogTypes: make(map[string]bool),
+	}
+}
+
+func NewWithGlue(s3Client *s3.Client, bucket string, maxSize int, maxAge time.Duration, glueCatalog interface {
+	EnsureDatabase(ctx context.Context) error
+	CreateTable(ctx context.Context, logType string) error
+	AddPartition(ctx context.Context, logType string, year, month, day, hour int) error
+}) *Writer {
+	return &Writer{
+		s3Client:     s3Client,
+		bucket:       bucket,
+		maxSize:      maxSize,
+		maxAge:       maxAge,
+		buffer:       nil,
+		glueCatalog:  glueCatalog,
+		seenLogTypes: make(map[string]bool),
 	}
 }
 
@@ -48,6 +71,17 @@ func (w *Writer) WriteEvent(ctx context.Context, event *logprocessor.ProcessedEv
 				return fmt.Errorf("flush buffer: %w", err)
 			}
 		}
+
+		if w.glueCatalog != nil && !w.seenLogTypes[event.LogType] {
+			if err := w.glueCatalog.EnsureDatabase(ctx); err != nil {
+				return fmt.Errorf("ensure database: %w", err)
+			}
+			if err := w.glueCatalog.CreateTable(ctx, event.LogType); err != nil {
+				return fmt.Errorf("create table: %w", err)
+			}
+			w.seenLogTypes[event.LogType] = true
+		}
+
 		w.buffer = &EventBuffer{
 			logType:   event.LogType,
 			hour:      event.EventTime.Truncate(time.Hour),
@@ -96,6 +130,16 @@ func (w *Writer) flushBuffer(ctx context.Context) error {
 	})
 	if err != nil {
 		return fmt.Errorf("put object: %w", err)
+	}
+
+	if w.glueCatalog != nil {
+		year := w.buffer.hour.Year()
+		month := int(w.buffer.hour.Month())
+		day := w.buffer.hour.Day()
+		hour := w.buffer.hour.Hour()
+		if err := w.glueCatalog.AddPartition(ctx, w.buffer.logType, year, month, day, hour); err != nil {
+			return fmt.Errorf("add partition: %w", err)
+		}
 	}
 
 	w.buffer = nil

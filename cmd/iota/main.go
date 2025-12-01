@@ -50,6 +50,9 @@ func run() error {
 		bloomFalsePositive = flag.Float64("bloom-false-positive", 0.001, "false positive rate for bloom filter (0.0-1.0)")
 		downloadWorkers = flag.Int("download-workers", 5, "number of parallel download workers")
 		processWorkers  = flag.Int("process-workers", 10, "number of parallel process workers")
+		glueDatabase = flag.String("glue-database", "", "Glue database name for data catalog (optional)")
+		athenaWorkgroup = flag.String("athena-workgroup", "primary", "Athena workgroup for queries")
+		athenaResultBucket = flag.String("athena-result-bucket", "", "S3 bucket for Athena query results (optional)")
 	)
 	flag.Parse()
 
@@ -98,7 +101,7 @@ func run() error {
 				log.Printf("health server error: %v", err)
 			}
 		}()
-		return runSQS(ctx, *sqsQueueURL, *s3Bucket, *awsRegion, *rulesDir, *python, *enginePy, *stateFile, *dataLakeBucket, *bloomFile, *bloomExpectedItems, *bloomFalsePositive, *downloadWorkers, *processWorkers, slackClient)
+		return runSQS(ctx, *sqsQueueURL, *s3Bucket, *awsRegion, *rulesDir, *python, *enginePy, *stateFile, *dataLakeBucket, *bloomFile, *bloomExpectedItems, *bloomFalsePositive, *downloadWorkers, *processWorkers, *glueDatabase, *athenaWorkgroup, *athenaResultBucket, slackClient)
 	default:
 		return fmt.Errorf("invalid mode: %s (must be once, watch, s3-poll, or sqs)", *mode)
 	}
