@@ -16,6 +16,7 @@ import (
 	"github.com/bilals12/iota/internal/engine"
 	"github.com/bilals12/iota/internal/events"
 	"github.com/bilals12/iota/internal/logprocessor"
+	"github.com/bilals12/iota/internal/state"
 	"github.com/bilals12/iota/pkg/cloudtrail"
 	"time"
 )
@@ -30,6 +31,12 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 
 	sqsClient := sqs.NewFromConfig(awsCfg)
 	s3Client := s3.NewFromConfig(awsCfg)
+
+	stateDB, err := state.Open(stateFile)
+	if err != nil {
+		return fmt.Errorf("open state database: %w", err)
+	}
+	defer stateDB.Close()
 
 	eng := engine.New(python, enginePy, rulesDir)
 	processor := logprocessor.New()
@@ -54,6 +61,23 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 	}
 
 	handler := func(ctx context.Context, bucket, key string) error {
+		accountID, eventRegion, err := events.ExtractAccountRegionFromKey(key)
+		if err != nil {
+			log.Printf("warning: failed to parse s3 key, skipping state check: %v", err)
+			accountID = "unknown"
+			eventRegion = "unknown"
+		}
+
+		lastKey, err := stateDB.GetLastProcessedKey(bucket, accountID, eventRegion)
+		if err != nil {
+			log.Printf("warning: failed to get last processed key: %v", err)
+		}
+
+		if lastKey == key {
+			log.Printf("skipping already processed s3 object: s3://%s/%s", bucket, key)
+			return nil
+		}
+
 		log.Printf("processing s3 object: s3://%s/%s", bucket, key)
 
 		result, err := s3Client.GetObject(ctx, &s3.GetObjectInput{
@@ -83,6 +107,11 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 		}
 
 		if len(batch) == 0 {
+			if accountID != "unknown" && eventRegion != "unknown" {
+				if err := stateDB.UpdateLastProcessedKey(bucket, accountID, eventRegion, key); err != nil {
+					log.Printf("warning: failed to update state: %v", err)
+				}
+			}
 			return nil
 		}
 
@@ -94,6 +123,12 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 		for _, match := range matches {
 			if err := forwarder.ProcessMatch(ctx, match, 60); err != nil {
 				log.Printf("error processing match: %v", err)
+			}
+		}
+
+		if accountID != "unknown" && eventRegion != "unknown" {
+			if err := stateDB.UpdateLastProcessedKey(bucket, accountID, eventRegion, key); err != nil {
+				log.Printf("warning: failed to update state: %v", err)
 			}
 		}
 
