@@ -34,7 +34,11 @@ func New() *Processor {
 
 func getParsers() map[string]parsers.ParserInterface {
 	return map[string]parsers.ParserInterface{
-		"AWS.CloudTrail": parsers.NewCloudTrailParser(),
+		"AWS.CloudTrail":      parsers.NewCloudTrailParser(),
+		"AWS.S3ServerAccess":  parsers.NewS3ServerAccessParser(),
+		"AWS.VPCFlow":         parsers.NewVPCFlowParser(),
+		"AWS.ALB":             parsers.NewALBParser(),
+		"AWS.AuroraMySQLAudit": parsers.NewAuroraMySQLAuditParser(),
 	}
 }
 
