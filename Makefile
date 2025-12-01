@@ -56,3 +56,26 @@ run-watch:
 # Run all checks before commit
 pre-commit: test build
 	@echo "✓ All pre-commit checks passed"
+
+# Lint code
+lint:
+	@golangci-lint run
+
+# Format code
+fmt:
+	@go fmt ./...
+	@echo "✓ Formatted code"
+
+# Run tests with coverage
+test-coverage:
+	@go test -v -coverprofile=coverage.out ./...
+	@go tool cover -html=coverage.out -o coverage.html
+	@echo "✓ Coverage report generated: coverage.html"
+
+# Validate Dockerfile
+docker-validate:
+	@hadolint Dockerfile || echo "Install hadolint: https://github.com/hadolint/hadolint"
+
+# Run all validation checks
+validate: fmt lint test
+	@echo "✓ All validation checks passed"

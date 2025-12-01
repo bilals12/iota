@@ -2,16 +2,41 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/bilals12/iota/internal/metrics"
 )
 
 type HealthServer struct {
-	server *http.Server
+	server     *http.Server
+	readiness  ReadinessChecker
+	metrics    bool
+}
+
+type ReadinessChecker interface {
+	Check(ctx context.Context) error
+}
+
+type DBReadinessChecker struct {
+	db *sql.DB
+}
+
+func NewDBReadinessChecker(db *sql.DB) *DBReadinessChecker {
+	return &DBReadinessChecker{db: db}
+}
+
+func (c *DBReadinessChecker) Check(ctx context.Context) error {
+	return c.db.PingContext(ctx)
 }
 
 func NewHealthServer(port string) *HealthServer {
+	return NewHealthServerWithReadiness(port, nil, false)
+}
+
+func NewHealthServerWithReadiness(port string, readiness ReadinessChecker, enableMetrics bool) *HealthServer {
 	mux := http.NewServeMux()
 	server := &HealthServer{
 		server: &http.Server{
@@ -20,10 +45,15 @@ func NewHealthServer(port string) *HealthServer {
 			ReadTimeout:  5 * time.Second,
 			WriteTimeout: 5 * time.Second,
 		},
+		readiness: readiness,
+		metrics:   enableMetrics,
 	}
 
 	mux.HandleFunc("/health", server.healthHandler)
 	mux.HandleFunc("/ready", server.readyHandler)
+	if enableMetrics {
+		mux.Handle("/metrics", metrics.Handler())
+	}
 
 	return server
 }
@@ -48,6 +78,17 @@ func (s *HealthServer) healthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *HealthServer) readyHandler(w http.ResponseWriter, r *http.Request) {
+	if s.readiness != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+
+		if err := s.readiness.Check(ctx); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(fmt.Sprintf("NOT READY: %v", err)))
+			return
+		}
+	}
+
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("READY"))
 }

@@ -48,6 +48,10 @@ spec:
               value: "us-east-1"
             - name: DATA_LAKE_BUCKET
               value: "" # Optional, override in overlay if using data lake
+            - name: ENABLE_METRICS
+              value: "true" # Enable Prometheus metrics endpoint
+            - name: HEALTH_PORT
+              value: "8080"
             - name: SLACK_WEBHOOK_URL
               valueFrom:
                 secretKeyRef:
@@ -56,6 +60,9 @@ spec:
                   optional: true
           ports:
             - name: health
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
               containerPort: 8080
               protocol: TCP
           livenessProbe:

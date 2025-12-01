@@ -1,0 +1,72 @@
+# Git
+.git
+.gitignore
+.github
+
+# Documentation
+*.md
+docs/
+*.txt
+
+# Development files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Test files
+testdata/
+*_test.go
+*_test.py
+*.test
+
+# Build artifacts
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# IDE
+.DS_Store
+*.iml
+
+# CI/CD
+.github/workflows/
+
+# Terraform
+terraform/
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Kubernetes
+deployments/
+*.yaml
+*.yml
+!engines/**/*.yaml
+!engines/**/*.yml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Go
+vendor/
+*.mod.sum
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
