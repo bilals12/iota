@@ -26,8 +26,9 @@ iota is a self-hosted CloudTrail detection engine with enterprise-grade architec
 ┌─────────────────────────────────────────────────────────────┐
 │  Log Processor (internal/logprocessor)                      │
 │  • Downloads and decompresses .json.gz files              │
-│  • Classifies log types (AWS.CloudTrail, AWS.S3, etc.)    │
-│  • Parses and normalizes events                            │
+│  • Adaptive classifier with penalty-based priority queue  │
+│  • Supports CloudTrail, S3, VPC Flow, ALB, Aurora MySQL │
+│  • Parses and normalizes events by log type              │
 │  • Adds event metadata (EventTime, ParseTime, RowID)       │
 └───────────────────────┬─────────────────────────────────────┘
                         │
@@ -86,25 +87,52 @@ iota is a self-hosted CloudTrail detection engine with enterprise-grade architec
 
 ### 1. Log Processor (internal/logprocessor)
 
-Processes raw CloudTrail logs and classifies them by service.
+Processes raw logs and classifies them using an adaptive classifier.
 
-**Classification System**:
-- Maps `eventSource` to log types (AWS.CloudTrail, AWS.S3, AWS.IAM, etc.)
+**Adaptive Classification System**:
+- Uses penalty-based priority queue to identify log types
+- Parsers that fail receive a penalty, reducing priority for future classifications
+- Supports multiple log types: CloudTrail, S3 Server Access, VPC Flow, ALB, Aurora MySQL Audit
+- Handles both CloudTrail JSON files (with `Records` array) and line-delimited logs
 - Adds event metadata (EventTime, ParseTime, RowID)
 - Normalizes event structure
+
+**Supported Log Types**:
+- `AWS.CloudTrail`: CloudTrail API audit logs (JSON format)
+- `AWS.S3ServerAccess`: S3 server access logs (CSV format)
+- `AWS.VPCFlow`: VPC Flow Logs (CSV format)
+- `AWS.ALB`: Application Load Balancer access logs (CSV format)
+- `AWS.AuroraMySQLAudit`: Aurora MySQL audit logs (CSV format)
 
 **Key Types**:
 ```go
 type Processor struct {
-    classifier *Classifier
+    adaptiveClassifier *AdaptiveClassifier
 }
 
 type ProcessedEvent struct {
     Event           *cloudtrail.Event
     LogType         string
-    EventTime time.Time
-    ParseTime time.Time
-    RowID     string
+    EventTime       time.Time
+    ParseTime       time.Time
+    RowID           string
+}
+
+type AdaptiveClassifier struct {
+    parsers     *ParserPriorityQueue
+    stats       ClassifierStats
+    parserStats map[string]*ParserStats
+}
+
+type ParserPriorityQueue struct {
+    items []*ParserQueueItem
+}
+
+type ParserQueueItem struct {
+    logType string
+    parser  parsers.ParserInterface
+    penalty int
+    index   int
 }
 ```
 
@@ -116,6 +144,13 @@ for event := range events {
     // Processed event with classification
 }
 ```
+
+**How Adaptive Classification Works**:
+1. All parsers start with penalty=1 in a min-heap priority queue
+2. For each log line, the classifier tries parsers in priority order (lowest penalty first)
+3. If a parser fails, it receives penalty+1 and is moved down in the queue
+4. If a parser succeeds, its penalty is reset to 0 and it moves to the front
+5. This ensures frequently-used parsers are tried first, improving performance
 
 ### 2. Data Lake Writer (internal/datalake)
 
@@ -348,14 +383,15 @@ func (s *HealthServer) Start(ctx context.Context) error
 3. **SQS Queue**: SNS messages delivered to SQS queue (with DLQ for failures)
 4. **SQS Processing**: iota receives SQS messages and extracts S3 bucket/key
 5. **Download**: Downloads `.json.gz` files from S3
-6. **Log Processing**: Decompresses and parses CloudTrail JSON
-7. **Classification**: Classifies events by service (AWS.CloudTrail, AWS.S3, etc.)
-8. **Data Lake**: Writes processed events to S3 with partitioning (optional)
-9. **Rules Engine**: Executes Python detection rules
-10. **Deduplication**: Checks for existing alerts within dedup period
-11. **Alert Forwarding**: Routes alerts to configured outputs
-12. **Delivery**: Sends alerts to Slack, stdout, or other destinations
-13. **Health Checks**: HTTP endpoints available for Kubernetes probes
+6. **Log Processing**: Decompresses and parses log files
+7. **Adaptive Classification**: Uses penalty-based priority queue to identify log type (CloudTrail, S3, VPC Flow, ALB, Aurora MySQL)
+8. **Parsing**: Parses events according to identified log type
+9. **Data Lake**: Writes processed events to S3 with partitioning (optional)
+10. **Rules Engine**: Executes Python detection rules
+11. **Deduplication**: Checks for existing alerts within dedup period
+12. **Alert Forwarding**: Routes alerts to configured outputs
+13. **Delivery**: Sends alerts to Slack, stdout, or other destinations
+14. **Health Checks**: HTTP endpoints available for Kubernetes probes
 
 ## Deployment Model
 
@@ -402,6 +438,7 @@ iota is self-hosted and runs in your AWS environment:
 ## Design Decisions
 
 - **Event-Driven**: SNS/SQS for real-time processing with sub-minute latency
+- **Adaptive Classifier**: Penalty-based priority queue for efficient multi-log source support
 - **SQLite**: Simple state management without additional AWS services
 - **Self-Hosted**: Full control, no vendor lock-in, no per-GB costs
 - **CLI-Only**: Integrates with existing tooling, no frontend complexity
@@ -415,8 +452,12 @@ iota is self-hosted and runs in your AWS environment:
 - **Multiple Outputs**: PagerDuty, webhooks, custom integrations
 - **Health Monitoring**: CloudWatch metrics and alarms
 - **Cross-Account Support**: Assume role for multi-account setups
-- **Adaptive Classifier**: Multi-log source support with penalty-based parser selection
-- **Multi-Account Support**: Cross-account IAM role assumption
+- **State Tracking**: Resume processing from last processed key per bucket/account/region
+- **Bloom Filter Deduplication**: Cross-trail deduplication for duplicate events
+- **Parallel Processing**: Configurable worker pools for concurrent log processing
+- **S3 Delimiter Discovery**: Efficient S3 key discovery for large buckets
+- **Additional Log Sources**: Support for more AWS log types (GuardDuty, CloudWatch Logs, etc.)
+- **Correlation Engine**: Time-windowed event correlation across log types
 
 ## References
 
