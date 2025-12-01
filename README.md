@@ -16,18 +16,19 @@ iota gives you:
 ## how it works
 
 ```
-cloudtrail (s3) → s3 notifications → sns topic → sqs queue → iota processor → log processor → data lake (s3) → rules engine → deduplication → alert forwarder → alerts
+cloudtrail (s3) → s3 notifications → sns topic → sqs queue → iota processor → adaptive classifier → log processor → data lake (s3) → rules engine → deduplication → alert forwarder → alerts
 ```
 
 1. **cloudtrail** writes logs to s3 bucket
 2. **s3 notifications** trigger sns topic on new object creation
 3. **sns → sqs** delivers notifications to sqs queue
 4. **iota sqs processor** receives notifications and downloads log files
-5. **log processor** classifies and normalizes events
-6. **data lake** stores processed events in s3 with partitioning (optional)
-7. **rules engine** executes python detection rules
-8. **deduplication** prevents alert fatigue
-9. **alert forwarder** routes alerts to slack, stdout, or other outputs
+5. **adaptive classifier** uses penalty-based priority queue to identify log type
+6. **log processor** parses and normalizes events by log type
+7. **data lake** stores processed events in s3 with partitioning (optional)
+8. **rules engine** executes python detection rules
+9. **deduplication** prevents alert fatigue
+10. **alert forwarder** routes alerts to slack, stdout, or other outputs
 
 ## quick start
 
@@ -36,7 +37,6 @@ cloudtrail (s3) → s3 notifications → sns topic → sqs queue → iota proces
 - go 1.23+
 - python 3.11+
 - aws credentials with cloudtrail s3 read access
-- gocloudtrail installed and configured
 
 ### installation
 
@@ -155,6 +155,18 @@ iam policy:
 }
 ```
 
+## log sources
+
+iota supports multiple AWS log types via an adaptive classifier:
+
+- **AWS.CloudTrail**: CloudTrail API audit logs (JSON)
+- **AWS.S3ServerAccess**: S3 server access logs (CSV)
+- **AWS.VPCFlow**: VPC Flow Logs (CSV)
+- **AWS.ALB**: Application Load Balancer access logs (CSV)
+- **AWS.AuroraMySQLAudit**: Aurora MySQL audit logs (CSV)
+
+the adaptive classifier uses a penalty-based priority queue to automatically identify log types. parsers that fail receive a penalty, reducing their priority for future classifications. this ensures efficient log type detection across mixed log sources.
+
 ## detection rules
 
 iota ships with **39 production-grade CloudTrail detection rules** covering all 14 MITRE ATT&CK tactics:
@@ -256,10 +268,13 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture.
 
 key components:
 
-- **reader**: streams jsonl cloudtrail events
-- **engine**: orchestrates python rule execution
-- **rules**: python detection logic
-- **alerts**: json output for downstream routing
+- **adaptive classifier**: penalty-based priority queue for multi-log source support
+- **log processor**: parses and normalizes events by log type
+- **data lake writer**: s3-based storage with hourly partitioning
+- **rules engine**: orchestrates python rule execution
+- **deduplication**: sqlite-based alert deduplication
+- **alert forwarder**: routes alerts to configured outputs
+- **health check server**: http endpoints for kubernetes probes
 
 ## development
 
@@ -295,8 +310,8 @@ mit license. see LICENSE file.
 
 ---
 
-**status**: beta - core detection engine working, event-driven processing with SNS/SQS, data lake and deduplication implemented
+**status**: beta - core detection engine working, event-driven processing with SNS/SQS, adaptive classifier with multi-log source support, data lake and deduplication implemented
 
-**architecture**: event-driven processing with SNS/SQS pipeline, health check endpoints, terraform module for infrastructure
+**architecture**: event-driven processing with SNS/SQS pipeline, adaptive classifier with penalty-based priority queue, health check endpoints, terraform module for infrastructure
 
-**compatibility**: tested with aws cloudtrail (organization trails, single account trails, s3 event format)
+**compatibility**: tested with aws cloudtrail (organization trails, single account trails, s3 event format). supports cloudtrail, s3 server access, vpc flow, alb, and aurora mysql audit logs
