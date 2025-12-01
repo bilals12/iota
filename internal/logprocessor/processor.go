@@ -34,7 +34,8 @@ func New() *Processor {
 
 func getParsers() map[string]parsers.ParserInterface {
 	return map[string]parsers.ParserInterface{
-		"AWS.CloudTrail": parsers.NewCloudTrailParser(),
+		"AWS.CloudTrail":      parsers.NewCloudTrailParser(),
+		"AWS.S3ServerAccess":  parsers.NewS3ServerAccessParser(),
 	}
 }
 
