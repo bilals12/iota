@@ -3,6 +3,9 @@
 .gitignore
 .github
 
+# Docker config (needed for build)
+!.docker-config.json
+
 # Documentation
 *.md
 docs/
