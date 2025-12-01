@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/bilals12/iota/internal/logprocessor/parsers"
+	"github.com/bilals12/iota/pkg/cloudtrail"
 )
 
 type AdaptiveClassifier struct {
@@ -14,7 +17,7 @@ type AdaptiveClassifier struct {
 }
 
 type ClassifierResult struct {
-	Events  []interface{}
+	Events  []*cloudtrail.Event
 	Matched bool
 	LogType string
 	NumMiss int
@@ -37,9 +40,9 @@ type ParserStats struct {
 	LogType                string
 }
 
-func NewAdaptiveClassifier(parsers map[string]ParserInterface) *AdaptiveClassifier {
+func NewAdaptiveClassifier(parserMap map[string]parsers.ParserInterface) *AdaptiveClassifier {
 	return &AdaptiveClassifier{
-		parsers:     NewParserPriorityQueue(parsers),
+		parsers:     NewParserPriorityQueue(parserMap),
 		parserStats: make(map[string]*ParserStats),
 	}
 }
@@ -52,7 +55,7 @@ func (c *AdaptiveClassifier) ParserStats() map[string]*ParserStats {
 	return c.parserStats
 }
 
-func safeLogParse(logType string, parser ParserInterface, log string) (results []interface{}, err error) {
+func safeLogParse(logType string, parser parsers.ParserInterface, log string) (results []*cloudtrail.Event, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("parser %q panic: %v", logType, r)
@@ -101,14 +104,15 @@ func (c *AdaptiveClassifier) Classify(log string) (*ClassifierResult, error) {
 		endParseTime := time.Now().UTC()
 
 		if err != nil {
-			popped = append(popped, heap.Pop(c.parsers))
-			currentItem.penalty++
+			poppedItem := heap.Pop(c.parsers).(*ParserQueueItem)
+			popped = append(popped, poppedItem)
+			c.parsers.Update(poppedItem, poppedItem.penalty+1)
 			result.NumMiss++
 			continue
 		}
 
 		result.Matched = true
-		currentItem.penalty = 0
+		c.parsers.Update(currentItem, 0)
 		result.Events = parsedEvents
 		result.LogType = logType
 

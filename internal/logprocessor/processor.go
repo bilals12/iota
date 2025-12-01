@@ -1,17 +1,20 @@
 package logprocessor
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"time"
 
+	"github.com/bilals12/iota/internal/logprocessor/parsers"
 	"github.com/bilals12/iota/pkg/cloudtrail"
 )
 
 type Processor struct {
-	classifier *Classifier
+	adaptiveClassifier *AdaptiveClassifier
 }
 
 type ProcessedEvent struct {
@@ -23,8 +26,15 @@ type ProcessedEvent struct {
 }
 
 func New() *Processor {
+	parserMap := getParsers()
 	return &Processor{
-		classifier: NewClassifier(),
+		adaptiveClassifier: NewAdaptiveClassifier(parserMap),
+	}
+}
+
+func getParsers() map[string]parsers.ParserInterface {
+	return map[string]parsers.ParserInterface{
+		"AWS.CloudTrail": parsers.NewCloudTrailParser(),
 	}
 }
 
@@ -36,48 +46,104 @@ func (p *Processor) Process(ctx context.Context, reader io.Reader) (<-chan *Proc
 		defer close(events)
 		defer close(errs)
 
-		decoder := json.NewDecoder(reader)
-		for {
+		if err := p.processReader(ctx, reader, events); err != nil {
 			select {
+			case errs <- err:
 			case <-ctx.Done():
-				return
-			default:
-			}
-
-			var rawEvent map[string]interface{}
-			if err := decoder.Decode(&rawEvent); err != nil {
-				if err == io.EOF {
-					return
-				}
-				continue
-			}
-
-			var event cloudtrail.Event
-			eventBytes, _ := json.Marshal(rawEvent)
-			if err := json.Unmarshal(eventBytes, &event); err != nil {
-				continue
-			}
-
-			logType := p.classifier.Classify(&event)
-			now := time.Now()
-
-			processed := &ProcessedEvent{
-				Event:     &event,
-				LogType:   logType,
-				EventTime: now,
-				ParseTime: now,
-				RowID:     generateRowID(&event),
-			}
-
-			select {
-			case events <- processed:
-			case <-ctx.Done():
-				return
 			}
 		}
 	}()
 
 	return events, errs
+}
+
+func (p *Processor) processReader(ctx context.Context, reader io.Reader, events chan<- *ProcessedEvent) error {
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return fmt.Errorf("read data: %w", err)
+	}
+
+	var cloudTrailFile struct {
+		Records []json.RawMessage `json:"Records"`
+	}
+
+	if err := json.Unmarshal(data, &cloudTrailFile); err == nil && len(cloudTrailFile.Records) > 0 {
+		return p.processCloudTrailRecords(ctx, cloudTrailFile.Records, events)
+	}
+
+	return p.processLineByLine(ctx, data, events)
+}
+
+func (p *Processor) processCloudTrailRecords(ctx context.Context, records []json.RawMessage, events chan<- *ProcessedEvent) error {
+	for _, recordBytes := range records {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		result, err := p.adaptiveClassifier.Classify(string(recordBytes))
+		if err != nil {
+			continue
+		}
+
+		for _, event := range result.Events {
+			now := time.Now()
+			processed := &ProcessedEvent{
+				Event:     event,
+				LogType:   result.LogType,
+				EventTime: event.EventTime,
+				ParseTime: now,
+				RowID:     generateRowID(event),
+			}
+
+			select {
+			case events <- processed:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	}
+	return nil
+}
+
+func (p *Processor) processLineByLine(ctx context.Context, data []byte, events chan<- *ProcessedEvent) error {
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		line := scanner.Text()
+		if len(line) == 0 {
+			continue
+		}
+
+		result, err := p.adaptiveClassifier.Classify(line)
+		if err != nil {
+			continue
+		}
+
+		for _, event := range result.Events {
+			now := time.Now()
+			processed := &ProcessedEvent{
+				Event:     event,
+				LogType:   result.LogType,
+				EventTime: event.EventTime,
+				ParseTime: now,
+				RowID:     generateRowID(event),
+			}
+
+			select {
+			case events <- processed:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	}
+	return scanner.Err()
 }
 
 func generateRowID(event *cloudtrail.Event) string {
