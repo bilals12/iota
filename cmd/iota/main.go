@@ -15,6 +15,7 @@ import (
 	"github.com/bilals12/iota/internal/alerts"
 	"github.com/bilals12/iota/internal/api"
 	"github.com/bilals12/iota/internal/engine"
+	"github.com/bilals12/iota/internal/logprocessor"
 	"github.com/bilals12/iota/internal/reader"
 	"github.com/bilals12/iota/internal/s3poller"
 	"github.com/bilals12/iota/internal/watcher"
@@ -103,16 +104,33 @@ func runOnce(ctx context.Context, jsonlFile, rulesDir, python, enginePy string, 
 		return fmt.Errorf("jsonl flag is required in once mode")
 	}
 
-	r := reader.New()
-	events, errs := r.ReadFile(ctx, jsonlFile)
+	log.Printf("processing file: %s", jsonlFile)
+
+	file, err := os.Open(jsonlFile)
+	if err != nil {
+		return fmt.Errorf("open file: %w", err)
+	}
+	defer file.Close()
+
+	processor := logprocessor.New()
+	processedEvents, errs := processor.Process(ctx, file)
 
 	var batch []*cloudtrail.Event
-	for event := range events {
-		batch = append(batch, event)
+	for event := range processedEvents {
+		log.Printf("parsed event: logType=%s eventTime=%s eventID=%s",
+			event.LogType, event.EventTime.Format(time.RFC3339), event.Event.EventID)
+		batch = append(batch, event.Event)
 	}
 
 	if err := <-errs; err != nil {
-		return fmt.Errorf("read file: %w", err)
+		return fmt.Errorf("process events: %w", err)
+	}
+
+	log.Printf("processed %d events from file", len(batch))
+
+	if len(batch) == 0 {
+		log.Println("no events found in file")
+		return nil
 	}
 
 	eng := engine.New(python, enginePy, rulesDir)
@@ -120,6 +138,8 @@ func runOnce(ctx context.Context, jsonlFile, rulesDir, python, enginePy string, 
 	if err != nil {
 		return fmt.Errorf("analyze: %w", err)
 	}
+
+	log.Printf("found %d rule matches", len(matches))
 
 	for _, match := range matches {
 		if err := handleAlert(match, slackClient); err != nil {
