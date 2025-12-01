@@ -97,3 +97,4 @@ jobs:
           image-ref: ${{ steps.manifest.outputs.manifest }}
           format: "table"
           severity: "CRITICAL,HIGH"
+          scan-type: "image"
