@@ -16,6 +16,8 @@ type Integration struct {
 	AWSAccountID    string
 	S3Bucket        string
 	S3Prefix        string
+	RoleARN         string
+	KMSKeyID        string
 	Enabled         bool
 	CreatedAt       time.Time
 	LastEventTime  *time.Time
@@ -49,33 +51,50 @@ func initIntegrationDB(db *sql.DB) error {
 			aws_account_id TEXT,
 			s3_bucket TEXT,
 			s3_prefix TEXT,
+			role_arn TEXT,
+			kms_key_id TEXT,
 			enabled INTEGER DEFAULT 1,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			last_event_time TIMESTAMP,
 			event_status TEXT DEFAULT 'ACTIVE'
 		)
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec(`
+		ALTER TABLE integrations ADD COLUMN role_arn TEXT
+	`)
+	_ = err
+
+	_, err = db.Exec(`
+		ALTER TABLE integrations ADD COLUMN kms_key_id TEXT
+	`)
+	_ = err
+
+	return nil
 }
 
 func (m *Manager) Create(ctx context.Context, integration *Integration) error {
 	_, err := m.db.ExecContext(ctx, `
-		INSERT INTO integrations (id, type, label, aws_account_id, s3_bucket, s3_prefix, enabled, created_at, event_status)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO integrations (id, type, label, aws_account_id, s3_bucket, s3_prefix, role_arn, kms_key_id, enabled, created_at, event_status)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, integration.ID, integration.Type, integration.Label, integration.AWSAccountID,
-		integration.S3Bucket, integration.S3Prefix, integration.Enabled, integration.CreatedAt, integration.EventStatus)
+		integration.S3Bucket, integration.S3Prefix, integration.RoleARN, integration.KMSKeyID,
+		integration.Enabled, integration.CreatedAt, integration.EventStatus)
 	return err
 }
 
 func (m *Manager) Get(ctx context.Context, id string) (*Integration, error) {
 	var integration Integration
 	err := m.db.QueryRowContext(ctx, `
-		SELECT id, type, label, aws_account_id, s3_bucket, s3_prefix, enabled, created_at, last_event_time, event_status
+		SELECT id, type, label, aws_account_id, s3_bucket, s3_prefix, role_arn, kms_key_id, enabled, created_at, last_event_time, event_status
 		FROM integrations
 		WHERE id = ?
 	`, id).Scan(&integration.ID, &integration.Type, &integration.Label, &integration.AWSAccountID,
-		&integration.S3Bucket, &integration.S3Prefix, &integration.Enabled, &integration.CreatedAt,
-		&integration.LastEventTime, &integration.EventStatus)
+		&integration.S3Bucket, &integration.S3Prefix, &integration.RoleARN, &integration.KMSKeyID,
+		&integration.Enabled, &integration.CreatedAt, &integration.LastEventTime, &integration.EventStatus)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("integration not found: %s", id)
 	}
@@ -87,7 +106,7 @@ func (m *Manager) Get(ctx context.Context, id string) (*Integration, error) {
 
 func (m *Manager) List(ctx context.Context) ([]*Integration, error) {
 	rows, err := m.db.QueryContext(ctx, `
-		SELECT id, type, label, aws_account_id, s3_bucket, s3_prefix, enabled, created_at, last_event_time, event_status
+		SELECT id, type, label, aws_account_id, s3_bucket, s3_prefix, role_arn, kms_key_id, enabled, created_at, last_event_time, event_status
 		FROM integrations
 		WHERE enabled = 1
 		ORDER BY created_at DESC
@@ -101,8 +120,8 @@ func (m *Manager) List(ctx context.Context) ([]*Integration, error) {
 	for rows.Next() {
 		var integration Integration
 		err := rows.Scan(&integration.ID, &integration.Type, &integration.Label, &integration.AWSAccountID,
-			&integration.S3Bucket, &integration.S3Prefix, &integration.Enabled, &integration.CreatedAt,
-			&integration.LastEventTime, &integration.EventStatus)
+			&integration.S3Bucket, &integration.S3Prefix, &integration.RoleARN, &integration.KMSKeyID,
+			&integration.Enabled, &integration.CreatedAt, &integration.LastEventTime, &integration.EventStatus)
 		if err != nil {
 			return nil, err
 		}
