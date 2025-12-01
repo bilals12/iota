@@ -95,7 +95,8 @@ func run() error {
 		if healthPort == "" {
 			healthPort = "8080"
 		}
-		healthServer := api.NewHealthServer(healthPort)
+		enableMetrics := os.Getenv("ENABLE_METRICS") == "true"
+		healthServer := api.NewHealthServerWithReadiness(healthPort, nil, enableMetrics)
 		go func() {
 			if err := healthServer.Start(ctx); err != nil {
 				log.Printf("health server error: %v", err)
