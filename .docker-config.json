@@ -1,0 +1,4 @@
+{
+  "imageName": "bilals12/iota",
+  "dockerfile": "./Dockerfile"
+}

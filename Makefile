@@ -22,16 +22,58 @@ docker-build:
 	@docker build -t iota:latest .
 	@echo "✓ Built iota:latest"
 
-# Docker push (requires image_repo variable)
+# Docker push to Docker Hub (requires DOCKERHUB_USERNAME)
+docker-push-dockerhub:
+	@if [ -z "$(DOCKERHUB_USERNAME)" ]; then \
+		echo "ERROR: DOCKERHUB_USERNAME not set"; \
+		echo "Usage: make docker-push-dockerhub DOCKERHUB_USERNAME=yourusername IMAGE_TAG=v0.1.0"; \
+		exit 1; \
+	fi
+	@IMAGE_TAG=$(or $(IMAGE_TAG),latest); \
+	docker tag iota:latest $(DOCKERHUB_USERNAME)/iota:$$IMAGE_TAG; \
+	docker push $(DOCKERHUB_USERNAME)/iota:$$IMAGE_TAG; \
+	echo "✓ Pushed $(DOCKERHUB_USERNAME)/iota:$$IMAGE_TAG"
+
+# Docker push to ECR (requires IMAGE_REPO variable)
+docker-push-ecr:
+	@if [ -z "$(IMAGE_REPO)" ]; then \
+		echo "ERROR: IMAGE_REPO not set"; \
+		echo "Usage: make docker-push-ecr IMAGE_REPO=123456789012.dkr.ecr.us-east-1.amazonaws.com/iota IMAGE_TAG=v0.1.0"; \
+		exit 1; \
+	fi
+	@IMAGE_TAG=$(or $(IMAGE_TAG),latest); \
+	docker tag iota:latest $(IMAGE_REPO):$$IMAGE_TAG; \
+	docker push $(IMAGE_REPO):$$IMAGE_TAG; \
+	echo "✓ Pushed $(IMAGE_REPO):$$IMAGE_TAG"
+
+# Docker push to GitHub Container Registry (requires GITHUB_USERNAME)
+docker-push-ghcr:
+	@if [ -z "$(GITHUB_USERNAME)" ]; then \
+		echo "ERROR: GITHUB_USERNAME not set"; \
+		echo "Usage: make docker-push-ghcr GITHUB_USERNAME=yourusername IMAGE_TAG=v0.1.0"; \
+		exit 1; \
+	fi
+	@IMAGE_TAG=$(or $(IMAGE_TAG),latest); \
+	docker tag iota:latest ghcr.io/$(GITHUB_USERNAME)/iota:$$IMAGE_TAG; \
+	docker push ghcr.io/$(GITHUB_USERNAME)/iota:$$IMAGE_TAG; \
+	echo "✓ Pushed ghcr.io/$(GITHUB_USERNAME)/iota:$$IMAGE_TAG"
+
+# Docker push (generic - requires IMAGE_REPO variable)
 docker-push:
 	@if [ -z "$(IMAGE_REPO)" ]; then \
 		echo "ERROR: IMAGE_REPO not set"; \
-		echo "Usage: make docker-push IMAGE_REPO=123456789012.dkr.ecr.us-east-1.amazonaws.com/iota IMAGE_TAG=v0.1.0"; \
+		echo "Usage: make docker-push IMAGE_REPO=registry/namespace/iota IMAGE_TAG=v0.1.0"; \
+		echo ""; \
+		echo "Or use specific targets:"; \
+		echo "  make docker-push-dockerhub DOCKERHUB_USERNAME=yourusername"; \
+		echo "  make docker-push-ecr IMAGE_REPO=123456789012.dkr.ecr.us-east-1.amazonaws.com/iota"; \
+		echo "  make docker-push-ghcr GITHUB_USERNAME=yourusername"; \
 		exit 1; \
 	fi
-	@docker tag iota:latest $(IMAGE_REPO):$(IMAGE_TAG)
-	@docker push $(IMAGE_REPO):$(IMAGE_TAG)
-	@echo "✓ Pushed $(IMAGE_REPO):$(IMAGE_TAG)"
+	@IMAGE_TAG=$(or $(IMAGE_TAG),latest); \
+	docker tag iota:latest $(IMAGE_REPO):$$IMAGE_TAG; \
+	docker push $(IMAGE_REPO):$$IMAGE_TAG; \
+	echo "✓ Pushed $(IMAGE_REPO):$$IMAGE_TAG"
 
 # Helm package
 helm-package:

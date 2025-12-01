@@ -1,9 +1,15 @@
-name: Release
+name: Docker Hub Release
 
 on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Docker image tag"
+        required: true
+        default: "latest"
 
 jobs:
   build-amd64:
@@ -25,7 +31,8 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=raw,value=latest
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ github.event.inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
 
     outputs:
       digest: ${{ steps.build-amd64.outputs.digest }}
@@ -51,7 +58,8 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=raw,value=latest
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ github.event.inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
 
     outputs:
       digest: ${{ steps.build-arm64.outputs.digest }}
@@ -76,7 +84,8 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=raw,value=latest
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ github.event.inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
           sources: |
             ${{ needs.build-amd64.outputs.image-name }}@${{ needs.build-amd64.outputs.digest }}
             ${{ needs.build-arm64.outputs.image-name }}@${{ needs.build-arm64.outputs.digest }}
