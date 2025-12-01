@@ -7,6 +7,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/glue"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/bilals12/iota/internal/alerts"
@@ -16,13 +17,14 @@ import (
 	"github.com/bilals12/iota/internal/deduplication"
 	"github.com/bilals12/iota/internal/engine"
 	"github.com/bilals12/iota/internal/events"
+	gluecatalog "github.com/bilals12/iota/internal/glue"
 	"github.com/bilals12/iota/internal/logprocessor"
 	"github.com/bilals12/iota/internal/state"
 	"github.com/bilals12/iota/pkg/cloudtrail"
 	"time"
 )
 
-func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, enginePy, stateFile, dataLakeBucket, bloomFile string, bloomExpectedItems uint64, bloomFalsePositive float64, downloadWorkers, processWorkers int, slackClient *alerts.SlackClient) error {
+func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, enginePy, stateFile, dataLakeBucket, bloomFile string, bloomExpectedItems uint64, bloomFalsePositive float64, downloadWorkers, processWorkers int, glueDatabase, athenaWorkgroup, athenaResultBucket string, slackClient *alerts.SlackClient) error {
 	log.Printf("starting SQS processor: queue=%s", queueURL)
 
 	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
@@ -77,7 +79,15 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 
 	var dataLakeWriter *datalake.Writer
 	if dataLakeBucket != "" {
-		dataLakeWriter = datalake.New(s3Client, dataLakeBucket, 50*1024*1024, time.Minute)
+		if glueDatabase != "" {
+			glueClient := gluecatalog.New(glue.NewFromConfig(awsCfg), glueDatabase, dataLakeBucket)
+			if err := glueClient.EnsureDatabase(ctx); err != nil {
+				log.Printf("warning: failed to ensure glue database: %v", err)
+			}
+			dataLakeWriter = datalake.NewWithGlue(s3Client, dataLakeBucket, 50*1024*1024, time.Minute, glueClient)
+		} else {
+			dataLakeWriter = datalake.New(s3Client, dataLakeBucket, 50*1024*1024, time.Minute)
+		}
 		defer dataLakeWriter.Flush(ctx)
 	}
 
