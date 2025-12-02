@@ -4,6 +4,8 @@
 
 ![iota logo](docs/assets/iotaBlack.png)
 
+<sub>art by [fdkubba](https://www.faisalkubba.com/reels)</sub>
+
 **self-hosted cloudtrail detection engine**
 
 runs entirely within your aws account. consumes cloudtrail via s3, applies detection logic locally, emits alerts to your existing tooling. no telemetry exfiltration.
