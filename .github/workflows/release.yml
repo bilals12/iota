@@ -69,7 +69,7 @@ jobs:
         id: manifest
         uses: open-turo/actions-docker/manifest@v1
         with:
-          image-name: ${{ needs.build-amd64.outputs.image-name }}
+          image-name: bilals12/iota
           dockerhub-user: ${{ secrets.DOCKERHUB_USERNAME }}
           dockerhub-password: ${{ secrets.DOCKERHUB_PASSWORD }}
           metadata-tags: |
@@ -78,8 +78,8 @@ jobs:
             type=semver,pattern={{major}}
             type=raw,value=latest
           sources: |
-            ${{ needs.build-amd64.outputs.image-name }}@${{ needs.build-amd64.outputs.digest }}
-            ${{ needs.build-arm64.outputs.image-name }}@${{ needs.build-arm64.outputs.digest }}
+            bilals12/iota@${{ needs.build-amd64.outputs.digest }}
+            bilals12/iota@${{ needs.build-arm64.outputs.digest }}
 
       - name: Run Trivy vulnerability scanner (optional)
         uses: aquasecurity/trivy-action@master
