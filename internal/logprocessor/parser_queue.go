@@ -75,3 +75,12 @@ func (q *ParserPriorityQueue) Update(item *ParserQueueItem, penalty int) {
 	item.penalty = penalty
 	heap.Fix(q, item.index)
 }
+
+func (q *ParserPriorityQueue) FindByLogType(logType string) *ParserQueueItem {
+	for _, item := range q.items {
+		if item.logType == logType {
+			return item
+		}
+	}
+	return nil
+}

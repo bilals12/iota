@@ -20,11 +20,11 @@ type Processor struct {
 }
 
 type ProcessedEvent struct {
-	Event           *cloudtrail.Event
-	LogType         string
-	EventTime       time.Time
-	ParseTime       time.Time
-	RowID           string
+	Event     *cloudtrail.Event
+	LogType   string
+	EventTime time.Time
+	ParseTime time.Time
+	RowID     string
 }
 
 func New() *Processor {
@@ -44,11 +44,14 @@ func NewWithBloomFilter(bloomFilter *bloom.Filter) *Processor {
 
 func getParsers() map[string]parsers.ParserInterface {
 	return map[string]parsers.ParserInterface{
-		"AWS.CloudTrail":      parsers.NewCloudTrailParser(),
-		"AWS.S3ServerAccess":  parsers.NewS3ServerAccessParser(),
-		"AWS.VPCFlow":         parsers.NewVPCFlowParser(),
-		"AWS.ALB":             parsers.NewALBParser(),
-		"AWS.AuroraMySQLAudit": parsers.NewAuroraMySQLAuditParser(),
+		"AWS.CloudTrail":            parsers.NewCloudTrailParser(),
+		"AWS.S3ServerAccess":        parsers.NewS3ServerAccessParser(),
+		"AWS.VPCFlow":               parsers.NewVPCFlowParser(),
+		"AWS.ALB":                   parsers.NewALBParser(),
+		"AWS.AuroraMySQLAudit":      parsers.NewAuroraMySQLAuditParser(),
+		"Okta.SystemLog":            parsers.NewOktaParser(),
+		"GSuite.Reports":            parsers.NewGSuiteParser(),
+		"OnePassword.SignInAttempt": parsers.NewOnePasswordParser(),
 	}
 }
 
@@ -176,4 +179,54 @@ func (p *Processor) processLineByLine(ctx context.Context, data []byte, events c
 
 func generateRowID(event *cloudtrail.Event) string {
 	return fmt.Sprintf("%s-%s", event.EventID, event.EventTime.Format("20060102150405"))
+}
+
+func (p *Processor) ProcessEvent(ctx context.Context, eventJSON []byte, logTypeHint string) ([]*ProcessedEvent, error) {
+	line := string(eventJSON)
+
+	if logTypeHint != "" {
+		result, err := p.adaptiveClassifier.ClassifyWithHint(line, logTypeHint)
+		if err == nil && len(result.Events) > 0 {
+			return p.processClassifyResult(ctx, result)
+		}
+	}
+
+	result, err := p.adaptiveClassifier.Classify(line)
+	if err != nil {
+		return nil, fmt.Errorf("classify event: %w", err)
+	}
+
+	return p.processClassifyResult(ctx, result)
+}
+
+func (p *Processor) processClassifyResult(ctx context.Context, result *ClassifierResult) ([]*ProcessedEvent, error) {
+	var processed []*ProcessedEvent
+
+	for _, event := range result.Events {
+		select {
+		case <-ctx.Done():
+			return processed, ctx.Err()
+		default:
+		}
+
+		if p.bloomFilter != nil {
+			if p.bloomFilter.Test([]byte(event.EventID)) {
+				continue
+			}
+			p.bloomFilter.Add([]byte(event.EventID))
+		}
+
+		now := time.Now()
+		pe := &ProcessedEvent{
+			Event:     event,
+			LogType:   result.LogType,
+			EventTime: event.EventTime,
+			ParseTime: now,
+			RowID:     generateRowID(event),
+		}
+
+		processed = append(processed, pe)
+	}
+
+	return processed, nil
 }

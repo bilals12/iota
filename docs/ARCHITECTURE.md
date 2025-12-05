@@ -2,9 +2,15 @@
 
 ## Overview
 
-iota is a self-hosted CloudTrail detection engine with enterprise-grade architecture. It runs entirely within your AWS account, consuming CloudTrail logs via S3 and applying custom detection rules locally. No data leaves your control boundary.
+iota is a self-hosted security detection engine with enterprise-grade architecture. It runs entirely within your AWS account, consuming CloudTrail, Okta, Google Workspace, and 1Password logs. All detection logic runs locally. No data leaves your control boundary.
+
+iota supports two ingestion modes:
+- **SQS Mode**: For S3-based logs (CloudTrail, VPC Flow, ALB, etc.) via S3 event notifications
+- **EventBridge Mode**: For streaming SaaS logs (Okta, 1Password, Sailpoint) via EventBridge partner buses
 
 ## System Architecture
+
+### Mode 1: SQS Mode (S3-based logs)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -83,6 +89,43 @@ iota is a self-hosted CloudTrail detection engine with enterprise-grade architec
 └─────────────────────────────────────────────────────────────┘
 ```
 
+### Mode 2: EventBridge Mode (Streaming SaaS logs)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  SaaS Providers (Okta, 1Password, Sailpoint)                │
+│  • Events sent via EventBridge Partner Integration          │
+│  • Real-time streaming (no S3 intermediary)                │
+└───────────────────────┬─────────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│  EventBridge Partner Event Bus                              │
+│  • aws.partner/okta.com/{org}/...                          │
+│  • aws.partner/1password.com/...                           │
+│  • aws.partner/sailpoint.com/...                           │
+└───────────────────────┬─────────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│  EventBridge Rule → SQS Queue                               │
+│  • Routes events to SQS (no SNS needed)                    │
+│  • EventBridge envelope preserved in message               │
+└───────────────────────┬─────────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│  iota EventBridge Processor (internal/events)               │
+│  • Receives SQS messages directly                          │
+│  • Unwraps EventBridge envelope                            │
+│  • Detects log type from source/detail-type               │
+│  • No S3 download needed                                   │
+└───────────────────────┬─────────────────────────────────────┘
+                        │
+                        ▼
+        (continues to Log Processor → Rules Engine → Alerts)
+```
+
 ## Components
 
 ### 1. Log Processor (internal/logprocessor)
@@ -98,11 +141,18 @@ Processes raw logs and classifies them using an adaptive classifier.
 - Normalizes event structure
 
 **Supported Log Types**:
+
+AWS Logs (S3-based, SQS mode):
 - `AWS.CloudTrail`: CloudTrail API audit logs (JSON format)
 - `AWS.S3ServerAccess`: S3 server access logs (CSV format)
 - `AWS.VPCFlow`: VPC Flow Logs (CSV format)
 - `AWS.ALB`: Application Load Balancer access logs (CSV format)
 - `AWS.AuroraMySQLAudit`: Aurora MySQL audit logs (CSV format)
+
+SaaS Logs (EventBridge mode):
+- `Okta.SystemLog`: Okta authentication and admin events (JSON)
+- `GSuite.Reports`: Google Workspace activity reports (JSON)
+- `OnePassword.SignInAttempt`: 1Password sign-in events (JSON)
 
 **Key Types**:
 ```go
@@ -334,7 +384,7 @@ type Match struct {
 
 ### 7. SQS Processor (internal/events)
 
-Processes SQS messages containing S3 event notifications.
+Processes SQS messages containing S3 event notifications (for S3-based logs).
 
 **Features**:
 - Long polling (20 seconds) for efficient message retrieval
@@ -354,7 +404,66 @@ type SQSProcessor struct {
 }
 ```
 
-### 8. Health Check Server (internal/api)
+### 8. EventBridge Processor (internal/events)
+
+Processes EventBridge events directly from SQS (for streaming SaaS logs).
+
+**Features**:
+- Receives events directly from SQS (no S3 download)
+- Unwraps EventBridge envelope to extract log payload
+- Detects log type from EventBridge source/detail-type
+- Handles batched events (multiple events per message)
+- Long polling for efficient message retrieval
+
+**EventBridge Envelope Detection**:
+```go
+// Detects log type from EventBridge envelope
+func DetectEventSource(envelope *EventBridgeEnvelope) string {
+    // Okta: aws.partner/okta.com → Okta.SystemLog
+    // 1Password: aws.partner/1password.com → OnePassword.SignInAttempt
+    // Sailpoint: aws.partner/sailpoint.com → Sailpoint.Event
+    // GSuite: google.workspace → GSuite.Reports
+}
+```
+
+**Key Types**:
+```go
+type EventBridgeEnvelope struct {
+    Version    string          `json:"version"`
+    ID         string          `json:"id"`
+    DetailType string          `json:"detail-type"`
+    Source     string          `json:"source"`
+    Account    string          `json:"account"`
+    Time       time.Time       `json:"time"`
+    Region     string          `json:"region"`
+    Detail     json.RawMessage `json:"detail"`  // The actual log event
+}
+
+type EventBridgeProcessor struct {
+    client      *sqs.Client
+    queueURL    string
+    handler     EventHandler
+    maxMessages int32
+    waitTime    int32
+}
+
+type EventHandler func(ctx context.Context, eventJSON []byte, logType string, envelope *EventBridgeEnvelope) error
+```
+
+**Usage**:
+```go
+// EventBridge mode processes events directly (no S3 download)
+processor := events.NewEventBridgeProcessor(sqsClient, events.EventBridgeConfig{
+    QueueURL: "https://sqs.../okta-events-iota",
+    Handler: func(ctx context.Context, eventJSON []byte, logType string, envelope *EventBridgeEnvelope) error {
+        // logType = "Okta.SystemLog" (auto-detected from envelope)
+        // eventJSON = raw Okta event (unwrapped from envelope)
+        return processEvent(ctx, eventJSON, logType)
+    },
+})
+```
+
+### 9. Health Check Server (internal/api)
 
 Provides HTTP endpoints for Kubernetes health checks.
 
@@ -376,7 +485,7 @@ func (s *HealthServer) Start(ctx context.Context) error
 
 ## Data Flow
 
-### Complete Processing Pipeline
+### SQS Mode Pipeline (S3-based logs)
 
 1. **S3 Notifications**: CloudTrail writes logs to S3, triggering bucket notifications
 2. **SNS Topic**: S3 notifications published to SNS topic
@@ -384,7 +493,7 @@ func (s *HealthServer) Start(ctx context.Context) error
 4. **SQS Processing**: iota receives SQS messages and extracts S3 bucket/key
 5. **Download**: Downloads `.json.gz` files from S3
 6. **Log Processing**: Decompresses and parses log files
-7. **Adaptive Classification**: Uses penalty-based priority queue to identify log type (CloudTrail, S3, VPC Flow, ALB, Aurora MySQL)
+7. **Adaptive Classification**: Uses penalty-based priority queue to identify log type
 8. **Parsing**: Parses events according to identified log type
 9. **Data Lake**: Writes processed events to S3 with partitioning (optional)
 10. **Rules Engine**: Executes Python detection rules
@@ -393,20 +502,52 @@ func (s *HealthServer) Start(ctx context.Context) error
 13. **Delivery**: Sends alerts to Slack, stdout, or other destinations
 14. **Health Checks**: HTTP endpoints available for Kubernetes probes
 
+### EventBridge Mode Pipeline (Streaming SaaS logs)
+
+1. **SaaS Provider**: Okta/1Password/Sailpoint sends events to EventBridge
+2. **EventBridge Partner Bus**: Receives events from SaaS provider
+3. **EventBridge Rule**: Routes events to SQS queue
+4. **SQS Queue**: Events delivered to iota queue (no SNS needed)
+5. **EventBridge Processing**: iota receives SQS messages directly
+6. **Envelope Unwrapping**: Extracts log payload from EventBridge envelope
+7. **Log Type Detection**: Identifies log type from envelope source/detail-type
+8. **Adaptive Classification**: Uses hinted parser based on detected log type
+9. **Parsing**: Parses events according to identified log type
+10. **Data Lake**: Writes processed events to S3 with partitioning (optional)
+11. **Rules Engine**: Executes Python detection rules
+12. **Deduplication**: Checks for existing alerts within dedup period
+13. **Alert Forwarding**: Routes alerts to configured outputs
+14. **Delivery**: Sends alerts to Slack, stdout, or other destinations
+15. **Health Checks**: HTTP endpoints available for Kubernetes probes
+
 ## Deployment Model
 
 iota is self-hosted and runs in your AWS environment:
 
 **Compute**: EKS pod, ECS task, Fargate container, or EC2 instance
+
 **Permissions**: IAM role with:
+
+For SQS mode (S3-based logs):
 - S3 read access to CloudTrail bucket
 - SQS receive/delete message permissions
 - KMS decrypt permissions for encrypted logs
+
+For EventBridge mode (SaaS logs):
+- SQS receive/delete message permissions (no S3 access needed)
+
 **Network**: VPC with optional egress to alert destinations
+
 **Storage**:
 - SQLite databases for state and deduplication
 - S3 bucket for processed data lake (optional)
-**Infrastructure**: Terraform module for SQS queue, IAM roles, and SNS subscriptions
+
+**Infrastructure**: Terraform module for:
+- SQS queues (CloudTrail and/or EventBridge sources)
+- IAM roles and policies
+- SNS subscriptions (for S3 notifications)
+- EventBridge rules (for SaaS log routing)
+
 **Health Monitoring**: HTTP endpoints on port 8080 for Kubernetes probes
 
 ## Security Boundaries
@@ -445,19 +586,27 @@ iota is self-hosted and runs in your AWS environment:
 - **Health Checks**: HTTP endpoints for Kubernetes liveness/readiness probes
 - **Terraform Module**: Infrastructure as code for SQS, IAM, and SNS setup
 
+## Implemented Features
+
+- ✅ **EventBridge Integration**: Real-time processing of Okta, 1Password, and Sailpoint logs
+- ✅ **SaaS Log Parsers**: Okta.SystemLog, GSuite.Reports, OnePassword.SignInAttempt
+- ✅ **Glue Catalog Integration**: Automatic table creation and partition management
+- ✅ **Cross-Account Support**: IAM role assumption for multi-account setups
+- ✅ **State Tracking**: Resume processing from last processed key per bucket/account/region
+- ✅ **Bloom Filter Deduplication**: Cross-trail deduplication for duplicate events
+- ✅ **Health Monitoring**: HTTP endpoints for Kubernetes probes, Prometheus metrics
+- ✅ **Detection Rules**: 50+ rules across CloudTrail, Okta, GSuite, and 1Password
+
 ## Future Enhancements
 
-- **Glue Catalog Integration**: Automatic table creation and partition management
-- **Athena Queries**: Query processed data lake via Athena
+- **Athena Queries**: Query processed data lake via Athena (schema defined, queries pending)
 - **Multiple Outputs**: PagerDuty, webhooks, custom integrations
-- **Health Monitoring**: CloudWatch metrics and alarms
-- **Cross-Account Support**: Assume role for multi-account setups
-- **State Tracking**: Resume processing from last processed key per bucket/account/region
-- **Bloom Filter Deduplication**: Cross-trail deduplication for duplicate events
+- **CloudWatch Metrics**: Push metrics to CloudWatch for dashboards
 - **Parallel Processing**: Configurable worker pools for concurrent log processing
 - **S3 Delimiter Discovery**: Efficient S3 key discovery for large buckets
-- **Additional Log Sources**: Support for more AWS log types (GuardDuty, CloudWatch Logs, etc.)
+- **Additional Log Sources**: GuardDuty, CloudWatch Logs, WAF logs
 - **Correlation Engine**: Time-windowed event correlation across log types
+- **Kinesis Firehose Integration**: Long-term storage path alongside real-time detection
 
 ## References
 
