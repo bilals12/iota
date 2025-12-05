@@ -70,6 +70,11 @@ func safeLogParse(logType string, parser parsers.ParserInterface, log string) (r
 }
 
 func (c *AdaptiveClassifier) Classify(log string) (*ClassifierResult, error) {
+	return c.ClassifyWithHint(log, "")
+}
+
+// ClassifyWithHint tries a specific parser first (if hint is provided), then falls back to adaptive
+func (c *AdaptiveClassifier) ClassifyWithHint(log string, logTypeHint string) (*ClassifierResult, error) {
 	startClassify := time.Now().UTC()
 	var popped []interface{}
 	result := &ClassifierResult{}
@@ -93,6 +98,32 @@ func (c *AdaptiveClassifier) Classify(log string) (*ClassifierResult, error) {
 	log = strings.TrimSpace(log)
 	if len(log) == 0 {
 		return result, nil
+	}
+
+	if logTypeHint != "" {
+		if hintedItem := c.parsers.FindByLogType(logTypeHint); hintedItem != nil {
+			startParseTime := time.Now().UTC()
+			parsedEvents, err := safeLogParse(logTypeHint, hintedItem.parser, log)
+			endParseTime := time.Now().UTC()
+
+			if err == nil && len(parsedEvents) > 0 {
+				result.Matched = true
+				result.Events = parsedEvents
+				result.LogType = logTypeHint
+				c.parsers.Update(hintedItem, 0)
+
+				parserStat, exists := c.parserStats[logTypeHint]
+				if !exists {
+					parserStat = &ParserStats{LogType: logTypeHint}
+					c.parserStats[logTypeHint] = parserStat
+				}
+				parserStat.ParserTimeMicroseconds += uint64(endParseTime.Sub(startParseTime).Microseconds())
+				parserStat.BytesProcessedCount += uint64(len(log))
+				parserStat.LogLineCount++
+				parserStat.EventCount += uint64(len(result.Events))
+				return result, nil
+			}
+		}
 	}
 
 	for c.parsers.Len() > 0 {

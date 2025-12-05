@@ -31,27 +31,27 @@ func main() {
 
 func run() error {
 	var (
-		mode         = flag.String("mode", "sqs", "mode: once, watch, s3-poll, or sqs")
-		jsonlFile    = flag.String("jsonl", "", "path to jsonl file (once mode)")
-		eventsDir    = flag.String("events-dir", "", "path to events directory (watch mode)")
-		s3Bucket     = flag.String("s3-bucket", "", "S3 bucket name (s3-poll or sqs mode)")
-		s3Prefix     = flag.String("s3-prefix", "AWSLogs/", "S3 prefix (s3-poll mode)")
-		sqsQueueURL  = flag.String("sqs-queue-url", "", "SQS queue URL (sqs mode)")
-		pollInterval = flag.String("poll-interval", "5m", "polling interval (s3-poll mode)")
-		awsRegion    = flag.String("aws-region", "us-east-1", "AWS region")
-		rulesDir     = flag.String("rules", "", "path to rules directory")
-		python       = flag.String("python", "python3", "python executable path")
-		enginePy     = flag.String("engine", "engines/iota/engine.py", "path to engine.py")
-		stateFile    = flag.String("state", "iota.db", "path to state database")
-		slackWebhook = flag.String("slack-webhook", "", "slack webhook url for alerts")
-		dataLakeBucket = flag.String("data-lake-bucket", "", "S3 bucket for processed data lake (optional)")
-		bloomFile    = flag.String("bloom-file", "", "path to bloom filter file for deduplication (optional)")
+		mode               = flag.String("mode", "sqs", "mode: once, watch, s3-poll, sqs, or eventbridge")
+		jsonlFile          = flag.String("jsonl", "", "path to jsonl file (once mode)")
+		eventsDir          = flag.String("events-dir", "", "path to events directory (watch mode)")
+		s3Bucket           = flag.String("s3-bucket", "", "S3 bucket name (s3-poll or sqs mode)")
+		s3Prefix           = flag.String("s3-prefix", "AWSLogs/", "S3 prefix (s3-poll mode)")
+		sqsQueueURL        = flag.String("sqs-queue-url", "", "SQS queue URL (sqs or eventbridge mode)")
+		pollInterval       = flag.String("poll-interval", "5m", "polling interval (s3-poll mode)")
+		awsRegion          = flag.String("aws-region", "us-east-1", "AWS region")
+		rulesDir           = flag.String("rules", "", "path to rules directory")
+		python             = flag.String("python", "python3", "python executable path")
+		enginePy           = flag.String("engine", "engines/iota/engine.py", "path to engine.py")
+		stateFile          = flag.String("state", "iota.db", "path to state database")
+		slackWebhook       = flag.String("slack-webhook", "", "slack webhook url for alerts")
+		dataLakeBucket     = flag.String("data-lake-bucket", "", "S3 bucket for processed data lake (optional)")
+		bloomFile          = flag.String("bloom-file", "", "path to bloom filter file for deduplication (optional)")
 		bloomExpectedItems = flag.Uint64("bloom-expected-items", 10000000, "expected number of items for bloom filter")
 		bloomFalsePositive = flag.Float64("bloom-false-positive", 0.001, "false positive rate for bloom filter (0.0-1.0)")
-		downloadWorkers = flag.Int("download-workers", 5, "number of parallel download workers")
-		processWorkers  = flag.Int("process-workers", 10, "number of parallel process workers")
-		glueDatabase = flag.String("glue-database", "", "Glue database name for data catalog (optional)")
-		athenaWorkgroup = flag.String("athena-workgroup", "primary", "Athena workgroup for queries")
+		downloadWorkers    = flag.Int("download-workers", 5, "number of parallel download workers")
+		processWorkers     = flag.Int("process-workers", 10, "number of parallel process workers")
+		glueDatabase       = flag.String("glue-database", "", "Glue database name for data catalog (optional)")
+		athenaWorkgroup    = flag.String("athena-workgroup", "primary", "Athena workgroup for queries")
 		athenaResultBucket = flag.String("athena-result-bucket", "", "S3 bucket for Athena query results (optional)")
 	)
 	flag.Parse()
@@ -103,8 +103,24 @@ func run() error {
 			}
 		}()
 		return runSQS(ctx, *sqsQueueURL, *s3Bucket, *awsRegion, *rulesDir, *python, *enginePy, *stateFile, *dataLakeBucket, *bloomFile, *bloomExpectedItems, *bloomFalsePositive, *downloadWorkers, *processWorkers, *glueDatabase, *athenaWorkgroup, *athenaResultBucket, slackClient)
+	case "eventbridge":
+		if *sqsQueueURL == "" {
+			return fmt.Errorf("sqs-queue-url flag is required in eventbridge mode")
+		}
+		healthPort := os.Getenv("HEALTH_PORT")
+		if healthPort == "" {
+			healthPort = "8080"
+		}
+		enableMetrics := os.Getenv("ENABLE_METRICS") == "true"
+		healthServer := api.NewHealthServerWithReadiness(healthPort, nil, enableMetrics)
+		go func() {
+			if err := healthServer.Start(ctx); err != nil {
+				log.Printf("health server error: %v", err)
+			}
+		}()
+		return runEventBridge(ctx, *sqsQueueURL, *awsRegion, *rulesDir, *python, *enginePy, *stateFile, *dataLakeBucket, *bloomFile, *bloomExpectedItems, *bloomFalsePositive, *glueDatabase, *athenaWorkgroup, *athenaResultBucket, slackClient)
 	default:
-		return fmt.Errorf("invalid mode: %s (must be once, watch, s3-poll, or sqs)", *mode)
+		return fmt.Errorf("invalid mode: %s (must be once, watch, s3-poll, sqs, or eventbridge)", *mode)
 	}
 }
 
@@ -255,12 +271,12 @@ func runS3Poll(ctx context.Context, bucket, prefix, region string, interval time
 	}
 
 	poller, err := s3poller.New(ctx, s3poller.Config{
-		Bucket:   bucket,
-		Prefix:   prefix,
+		Bucket:    bucket,
+		Prefix:    prefix,
 		StateFile: stateFile,
-		Handler:  handler,
-		Interval: interval,
-		Region:   region,
+		Handler:   handler,
+		Interval:  interval,
+		Region:    region,
 	})
 	if err != nil {
 		return fmt.Errorf("create S3 poller: %w", err)

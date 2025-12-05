@@ -6,9 +6,9 @@
 
 <sub>art by [fdkubba](https://www.faisalkubba.com/reels)</sub>
 
-**self-hosted cloudtrail detection engine**
+**self-hosted security detection engine**
 
-runs entirely within your aws account. consumes cloudtrail via s3, applies detection logic locally, emits alerts to your existing tooling. no telemetry exfiltration.
+runs entirely within your aws account. consumes cloudtrail, okta, google workspace, and 1password logs. applies detection logic locally, emits alerts to your existing tooling. no telemetry exfiltration.
 
 </div>
 
@@ -25,9 +25,19 @@ iota gives you:
 
 ## how it works
 
+### cloudtrail mode (s3-based)
+
 ```
 cloudtrail (s3) → s3 notifications → sns topic → sqs queue → iota processor → adaptive classifier → log processor → data lake (s3) → rules engine → deduplication → alert forwarder → alerts
 ```
+
+### eventbridge mode (real-time saas logs)
+
+```
+okta/1password/sailpoint → eventbridge partner bus → sqs queue → iota processor → adaptive classifier → log processor → data lake (s3) → rules engine → deduplication → alert forwarder → alerts
+```
+
+**cloudtrail mode** (file-based):
 
 1. **cloudtrail** writes logs to s3 bucket
 2. **s3 notifications** trigger sns topic on new object creation
@@ -39,6 +49,16 @@ cloudtrail (s3) → s3 notifications → sns topic → sqs queue → iota proces
 8. **rules engine** executes python detection rules
 9. **deduplication** prevents alert fatigue
 10. **alert forwarder** routes alerts to slack, stdout, or other outputs
+
+**eventbridge mode** (streaming):
+
+1. **saas provider** (okta, 1password, sailpoint) sends events to eventbridge partner bus
+2. **eventbridge rule** routes events to sqs queue
+3. **iota eventbridge processor** receives events directly (no s3 download)
+4. **envelope unwrapper** extracts log payload from eventbridge envelope
+5. **adaptive classifier** identifies log type from envelope metadata
+6. **log processor** parses and normalizes events
+7. steps 7-10 same as cloudtrail mode
 
 ## quick start
 
@@ -75,13 +95,13 @@ iota runs in your aws environment:
 **network**: vpc with egress to alert destinations
 **storage**: local disk for state database and alert deduplication
 
-example eks deployment:
+example eks deployment (cloudtrail mode):
 
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: iota
+  name: iota-cloudtrail
 spec:
   replicas: 2
   template:
@@ -90,20 +110,70 @@ spec:
       containers:
         - name: iota
           image: your-registry/iota:latest
-          command:
-            - /app/iota
           args:
             - --mode=sqs
             - --sqs-queue-url=$(SQS_QUEUE_URL)
             - --s3-bucket=$(S3_BUCKET)
             - --aws-region=$(AWS_REGION)
-            - --rules=/app/rules/aws_cloudtrail
+            - --rules=/app/rules
             - --state=/data/state.db
           env:
             - name: SQS_QUEUE_URL
               value: "https://sqs.us-east-1.amazonaws.com/123456789012/iota-cloudtrail-queue"
             - name: S3_BUCKET
               value: "your-cloudtrail-bucket"
+            - name: AWS_REGION
+              value: "us-east-1"
+          ports:
+            - name: health
+              containerPort: 8080
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+          volumeMounts:
+            - name: state
+              mountPath: /data
+            - name: rules
+              mountPath: /app/rules
+              readOnly: true
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: iota-state
+        - name: rules
+          configMap:
+            name: iota-detection-rules
+```
+
+example eks deployment (eventbridge mode for okta):
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iota-okta
+spec:
+  replicas: 1
+  template:
+    spec:
+      serviceAccountName: iota
+      containers:
+        - name: iota
+          image: your-registry/iota:latest
+          args:
+            - --mode=eventbridge
+            - --sqs-queue-url=$(SQS_QUEUE_URL)
+            - --aws-region=$(AWS_REGION)
+            - --rules=/app/rules
+            - --state=/data/state.db
+          env:
+            - name: SQS_QUEUE_URL
+              value: "https://sqs.us-east-1.amazonaws.com/123456789012/okta-events-iota"
             - name: AWS_REGION
               value: "us-east-1"
           ports:
@@ -167,7 +237,9 @@ iam policy:
 
 ## log sources
 
-iota supports multiple AWS log types via an adaptive classifier:
+iota supports multiple log types via an adaptive classifier:
+
+**aws logs (s3-based)**:
 
 - **AWS.CloudTrail**: CloudTrail API audit logs (JSON)
 - **AWS.S3ServerAccess**: S3 server access logs (CSV)
@@ -175,18 +247,49 @@ iota supports multiple AWS log types via an adaptive classifier:
 - **AWS.ALB**: Application Load Balancer access logs (CSV)
 - **AWS.AuroraMySQLAudit**: Aurora MySQL audit logs (CSV)
 
+**saas logs (eventbridge)**:
+
+- **Okta.SystemLog**: Okta authentication and admin events
+- **GSuite.Reports**: Google Workspace activity reports
+- **OnePassword.SignInAttempt**: 1Password sign-in events
+
 the adaptive classifier uses a penalty-based priority queue to automatically identify log types. parsers that fail receive a penalty, reducing their priority for future classifications. this ensures efficient log type detection across mixed log sources.
+
+for eventbridge sources, iota automatically unwraps the eventbridge envelope and detects the log type from the `source` and `detail-type` fields.
 
 ## detection rules
 
-iota ships with **39 production-grade CloudTrail detection rules** covering all 14 MITRE ATT&CK tactics:
+iota ships with **50+ production-grade detection rules** across multiple log sources:
+
+**aws cloudtrail** (39 rules):
 
 - **4 Critical** severity rules (root access, public snapshots)
 - **18 High** severity rules (IAM backdoors, security logging disabled, data deletion)
 - **15 Medium** severity rules (MFA bypasses, unusual access patterns)
 - **2 Info/Low** severity rules (failed logins, secret access tracking)
 
-rules are python files in `rules/aws_cloudtrail/`:
+**okta** (5 rules):
+
+- Admin role assignment detection
+- API key creation alerts
+- MFA factor reset monitoring
+- Brute force detection by IP
+- Okta support access alerts
+
+**google workspace** (4 rules):
+
+- Admin role assignment
+- User suspension monitoring
+- 2-Step Verification disabled
+- Brute force detection by IP
+
+**1password** (3 rules):
+
+- Unusual client detection
+- Brute force login attempts
+- Login from unexpected country
+
+rules are python files in `rules/{log_type}/`:
 
 ```python
 # rules/aws_cloudtrail/aws_console_root_login.py
@@ -320,8 +423,12 @@ mit license. see LICENSE file.
 
 ---
 
-**status**: beta - core detection engine working, event-driven processing with SNS/SQS, adaptive classifier with multi-log source support, data lake and deduplication implemented
+**status**: beta - core detection engine working, event-driven processing with SNS/SQS and EventBridge, adaptive classifier with multi-log source support, data lake and deduplication implemented
 
-**architecture**: event-driven processing with SNS/SQS pipeline, adaptive classifier with penalty-based priority queue, health check endpoints, terraform module for infrastructure
+**architecture**: dual-mode processing - SNS/SQS for S3-based logs, EventBridge for streaming SaaS logs. adaptive classifier with penalty-based priority queue, health check endpoints, terraform module for infrastructure
 
-**compatibility**: tested with aws cloudtrail (organization trails, single account trails, s3 event format). supports cloudtrail, s3 server access, vpc flow, alb, and aurora mysql audit logs
+**compatibility**:
+
+- aws logs: cloudtrail, s3 server access, vpc flow, alb, aurora mysql audit
+- saas logs: okta systemlog, google workspace reports, 1password signinattempt
+- delivery: s3 event notifications (cloudtrail), eventbridge partner buses (okta, 1password, sailpoint)
