@@ -3,6 +3,7 @@ Detect unusual user agents making IAM changes.
 
 Unusual user agents can indicate tool usage by attackers or automation gone rogue.
 """
+
 import sys
 import os
 

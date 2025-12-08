@@ -3,6 +3,7 @@ Detect S3 Object Lock being disabled or retention reduced.
 
 Object Lock protects against ransomware - disabling it can indicate preparation for data destruction.
 """
+
 import sys
 import os
 
@@ -21,16 +22,22 @@ def rule(event):
     if event_name == "PutObjectLockConfiguration":
         # Check if being disabled
         enabled = deep_get(
-            event, "requestParameters", "ObjectLockConfiguration",
-            "ObjectLockEnabled", default=""
+            event,
+            "requestParameters",
+            "ObjectLockConfiguration",
+            "ObjectLockEnabled",
+            default="",
         )
         return enabled == "Disabled" or enabled == ""
 
     # Monitor retention policy being removed
     if event_name == "PutBucketVersioning":
         mfa_delete = deep_get(
-            event, "requestParameters", "VersioningConfiguration",
-            "MfaDelete", default=""
+            event,
+            "requestParameters",
+            "VersioningConfiguration",
+            "MfaDelete",
+            default="",
         )
         # Alert if MFA delete is being disabled
         return mfa_delete == "Disabled"

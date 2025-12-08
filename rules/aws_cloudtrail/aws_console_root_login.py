@@ -3,12 +3,13 @@ Detect root user console logins.
 
 Root user access should be avoided - detects when root successfully logs into the console.
 """
+
 import sys
 import os
 
 # Add helpers to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "helpers"))
-from iota_helpers import deep_get, is_successful, get_account_id
+from iota_helpers import deep_get, get_account_id
 
 
 def rule(event):

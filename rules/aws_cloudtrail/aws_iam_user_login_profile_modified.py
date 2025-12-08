@@ -3,6 +3,7 @@ Detect IAM user login profile modifications.
 
 Modifying login profiles can enable console access or reset passwords - potential account takeover.
 """
+
 import sys
 import os
 

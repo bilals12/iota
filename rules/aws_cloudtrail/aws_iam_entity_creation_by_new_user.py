@@ -3,15 +3,12 @@ Detect IAM entity creation by newly created users.
 
 Newly created users creating more users/roles may indicate account compromise spreading.
 """
+
 import sys
 import os
-from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "helpers"))
 from iota_helpers import deep_get, is_successful, aws_rule_context
-
-# Consider a user "new" if created within this many days
-NEW_USER_THRESHOLD_DAYS = 1
 
 
 def rule(event):
@@ -28,11 +25,6 @@ def rule(event):
     actor_type = deep_get(event, "userIdentity", "type", default="")
     if actor_type != "IAMUser":
         return False
-
-    # Check if user was recently created
-    # Note: In production, you'd want to check against a state database
-    # For now, we rely on principalId creation date if available
-    principal_id = deep_get(event, "userIdentity", "principalId", default="")
 
     # This is a simplified check - in production you'd maintain user creation timestamps
     # For demo purposes, we'll alert on any IAM user creating these resources

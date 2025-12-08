@@ -20,15 +20,15 @@ type Output interface {
 }
 
 type Alert struct {
-	AlertID          string
-	RuleID           string
-	Title            string
-	Severity         string
-	Event            *cloudtrail.Event
-	AlertContext     map[string]interface{}
+	AlertID           string
+	RuleID            string
+	DedupKey          string
+	Title             string
+	Severity          string
+	Event             *cloudtrail.Event
+	AlertContext      map[string]interface{}
 	AlertCreationTime string
 	AlertUpdateTime   string
-	AlertCount       int
 }
 
 func New(deduplicator *deduplication.Deduplicator, outputs []Output) *Forwarder {
@@ -59,15 +59,15 @@ func (f *Forwarder) ProcessMatch(ctx context.Context, match engine.Match, dedupP
 	}
 
 	alert := &Alert{
-		AlertID:          alertInfo.AlertID,
-		RuleID:           match.RuleID,
-		Title:            alertInfo.Title,
-		Severity:         alertInfo.Severity,
-		Event:            match.Event,
-		AlertContext:     alertContext,
+		AlertID:           alertInfo.AlertID,
+		RuleID:            match.RuleID,
+		DedupKey:          alertInfo.DedupKey,
+		Title:             alertInfo.Title,
+		Severity:          alertInfo.Severity,
+		Event:             match.Event,
+		AlertContext:      alertContext,
 		AlertCreationTime: alertInfo.AlertCreationTime.Format("2006-01-02T15:04:05Z"),
 		AlertUpdateTime:   alertInfo.AlertUpdateTime.Format("2006-01-02T15:04:05Z"),
-		AlertCount:       alertInfo.AlertCount,
 	}
 
 	for _, output := range f.outputs {

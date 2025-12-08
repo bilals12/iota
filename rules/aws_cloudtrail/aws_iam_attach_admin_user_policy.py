@@ -3,6 +3,7 @@ Detect when AdministratorAccess policy is attached to a user.
 
 This is a privilege escalation risk - users should receive permissions through roles, not direct policy attachment.
 """
+
 import sys
 import os
 

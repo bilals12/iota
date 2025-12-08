@@ -18,6 +18,7 @@ import (
 	"github.com/bilals12/iota/internal/logprocessor"
 	"github.com/bilals12/iota/internal/reader"
 	"github.com/bilals12/iota/internal/s3poller"
+	"github.com/bilals12/iota/internal/telemetry"
 	"github.com/bilals12/iota/internal/watcher"
 	"github.com/bilals12/iota/pkg/cloudtrail"
 )
@@ -70,6 +71,23 @@ func run() error {
 		log.Println("received shutdown signal")
 		cancel()
 	}()
+
+	otelCfg := telemetry.ConfigFromEnv()
+	shutdown, err := telemetry.Init(ctx, otelCfg)
+	if err != nil {
+		log.Printf("warning: failed to initialize telemetry: %v", err)
+	} else {
+		defer func() {
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer shutdownCancel()
+			if err := shutdown(shutdownCtx); err != nil {
+				log.Printf("warning: failed to shutdown telemetry: %v", err)
+			}
+		}()
+		if otelCfg.Enabled {
+			log.Printf("telemetry enabled: endpoint=%s", otelCfg.Endpoint)
+		}
+	}
 
 	var slackClient *alerts.SlackClient
 	if *slackWebhook != "" {

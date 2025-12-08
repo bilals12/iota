@@ -3,6 +3,7 @@ Detect KMS keys being disabled or scheduled for deletion.
 
 This can be ransomware or data destruction activity.
 """
+
 import sys
 import os
 

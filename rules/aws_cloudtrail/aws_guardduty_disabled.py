@@ -3,6 +3,7 @@ Detect GuardDuty being disabled or deleted.
 
 Attackers often disable security services to avoid detection.
 """
+
 import sys
 import os
 

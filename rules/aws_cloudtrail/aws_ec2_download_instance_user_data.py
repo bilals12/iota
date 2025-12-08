@@ -3,6 +3,7 @@ Detect downloading EC2 instance user data.
 
 User data often contains credentials and secrets - downloading it is suspicious.
 """
+
 import sys
 import os
 

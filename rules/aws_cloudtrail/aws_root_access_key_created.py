@@ -3,6 +3,7 @@ Detect root user access key creation.
 
 Root access keys should NEVER exist. This is a critical security risk.
 """
+
 import sys
 import os
 

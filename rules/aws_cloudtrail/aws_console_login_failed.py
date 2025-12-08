@@ -3,6 +3,7 @@ Detect failed AWS console login attempts.
 
 Failed logins can indicate brute force attacks or credential stuffing.
 """
+
 import sys
 import os
 

@@ -3,6 +3,7 @@ Detect IAM user creation.
 
 IAM users should be rare in modern AWS - most access should use federated identities or roles.
 """
+
 import sys
 import os
 

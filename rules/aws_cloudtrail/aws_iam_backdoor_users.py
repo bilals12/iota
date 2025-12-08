@@ -3,6 +3,7 @@ Detect suspicious IAM user creation patterns.
 
 Monitors for IAM users created by non-human entities (roles/services) which may indicate backdoor accounts.
 """
+
 import sys
 import os
 

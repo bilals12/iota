@@ -3,6 +3,7 @@ Detect container images pushed to ECR.
 
 Monitor for unauthorized image pushes which could indicate supply chain attacks.
 """
+
 import sys
 import os
 

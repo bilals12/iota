@@ -251,11 +251,13 @@ type Deduplicator struct {
 }
 
 type AlertInfo struct {
-    AlertID          string
-    AlertCount       int
+    AlertID           string
+    RuleID            string
+    DedupKey          string
     AlertCreationTime time.Time
     AlertUpdateTime   time.Time
-    Title            string
+    ResolvedAt        *time.Time
+    Title             string
     Severity         string
 }
 
@@ -295,10 +297,10 @@ type Alert struct {
     Title            string
     Severity         string
     Event            *cloudtrail.Event
-    AlertContext     map[string]interface{}
+    AlertContext      map[string]interface{}
     AlertCreationTime string
     AlertUpdateTime   string
-    AlertCount       int
+    DedupKey          string
 }
 ```
 

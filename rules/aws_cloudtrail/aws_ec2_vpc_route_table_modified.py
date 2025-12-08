@@ -3,6 +3,7 @@ Detect VPC route table modifications.
 
 Route table changes can enable network exfiltration or lateral movement paths.
 """
+
 import sys
 import os
 

@@ -3,6 +3,7 @@ Detect when one user creates API keys for another user.
 
 This can indicate privilege escalation or unauthorized key creation.
 """
+
 import sys
 import os
 
@@ -32,7 +33,9 @@ def rule(event):
 def title(event):
     """Generate alert title"""
     creator = deep_get(event, "userIdentity", "arn", default="UNKNOWN")
-    key_owner = deep_get(event, "responseElements", "accessKey", "userName", default="UNKNOWN")
+    key_owner = deep_get(
+        event, "responseElements", "accessKey", "userName", default="UNKNOWN"
+    )
     return f"[{creator}] created API keys for [{key_owner}]"
 
 
@@ -45,6 +48,8 @@ def alert_context(event):
     """Additional context for the alert"""
     context = aws_rule_context(event)
     context["keyOwner"] = deep_get(event, "responseElements", "accessKey", "userName")
-    context["accessKeyId"] = deep_get(event, "responseElements", "accessKey", "accessKeyId")
+    context["accessKeyId"] = deep_get(
+        event, "responseElements", "accessKey", "accessKeyId"
+    )
     context["creator"] = deep_get(event, "userIdentity", "arn")
     return context

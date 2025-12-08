@@ -3,6 +3,7 @@ Detect EC2 instance user data (startup script) modifications.
 
 User data often contains credentials - modifications can indicate persistence or backdoor attempts.
 """
+
 import sys
 import os
 
@@ -27,7 +28,9 @@ def title(event):
     """Generate alert title"""
     instance_id = deep_get(event, "requestParameters", "instanceId", default="UNKNOWN")
     actor_arn = deep_get(event, "userIdentity", "arn", default="UNKNOWN")
-    return f"EC2 startup script (userData) modified for [{instance_id}] by [{actor_arn}]"
+    return (
+        f"EC2 startup script (userData) modified for [{instance_id}] by [{actor_arn}]"
+    )
 
 
 def severity():
