@@ -3,6 +3,7 @@ Detect S3 server access logging being disabled.
 
 Disabling access logs is a defense evasion technique to hide data exfiltration.
 """
+
 import sys
 import os
 

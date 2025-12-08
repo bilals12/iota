@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -20,7 +19,9 @@ import (
 	"github.com/bilals12/iota/internal/events"
 	gluecatalog "github.com/bilals12/iota/internal/glue"
 	"github.com/bilals12/iota/internal/logprocessor"
+	"github.com/bilals12/iota/internal/telemetry"
 	"github.com/bilals12/iota/pkg/cloudtrail"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 func runEventBridge(ctx context.Context, queueURL, region, rulesDir, python, enginePy, stateFile, dataLakeBucket, bloomFile string, bloomExpectedItems uint64, bloomFalsePositive float64, glueDatabase, athenaWorkgroup, athenaResultBucket string, slackClient *alerts.SlackClient) error {
@@ -85,8 +86,21 @@ func runEventBridge(ctx context.Context, queueURL, region, rulesDir, python, eng
 	}
 
 	handler := func(ctx context.Context, eventJSON []byte, logType string, envelope *events.EventBridgeEnvelope) error {
+		spanAttrs := []attribute.KeyValue{
+			attribute.String("log_type", logType),
+			attribute.Int("event_json_size", len(eventJSON)),
+		}
+		if envelope != nil {
+			spanAttrs = append(spanAttrs,
+				attribute.String("eventbridge.source", envelope.Source),
+				attribute.String("eventbridge.detail_type", envelope.DetailType),
+			)
+		}
+		op, ctx := telemetry.StartOperation(ctx, "process_eventbridge_event", spanAttrs...)
+
 		eventBatches, err := events.ProcessBatchedEvents(eventJSON)
 		if err != nil {
+			op.End(err)
 			return fmt.Errorf("process batched events: %w", err)
 		}
 
@@ -109,14 +123,23 @@ func runEventBridge(ctx context.Context, queueURL, region, rulesDir, python, eng
 			}
 		}
 
+		op.SetAttributes(attribute.Int("events.count", len(allEvents)))
+
 		if len(allEvents) == 0 {
+			op.End(nil)
 			return nil
 		}
 
-		matches, err := eng.Analyze(ctx, allEvents)
+		analyzeCtx, analyzeSpan := telemetry.StartSpan(ctx, "engine.Analyze")
+		analyzeSpan.SetAttributes(attribute.Int("events.count", len(allEvents)))
+		matches, err := eng.Analyze(analyzeCtx, allEvents)
+		analyzeSpan.End()
 		if err != nil {
+			op.End(err)
 			return fmt.Errorf("analyze: %w", err)
 		}
+
+		op.SetAttributes(attribute.Int("matches.count", len(matches)))
 
 		for _, match := range matches {
 			if err := forwarder.ProcessMatch(ctx, match, 60); err != nil {
@@ -125,6 +148,7 @@ func runEventBridge(ctx context.Context, queueURL, region, rulesDir, python, eng
 		}
 
 		log.Printf("processed %d events, %d matches (source: %s)", len(allEvents), len(matches), logType)
+		op.End(nil)
 		return nil
 	}
 

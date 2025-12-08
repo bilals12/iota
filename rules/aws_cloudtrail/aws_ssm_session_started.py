@@ -3,6 +3,7 @@ Detect SSM Session Manager sessions being started.
 
 SSM Session Manager provides remote shell access to EC2 instances - monitor for unauthorized access.
 """
+
 import sys
 import os
 

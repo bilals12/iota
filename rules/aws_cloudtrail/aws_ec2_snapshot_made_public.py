@@ -3,6 +3,7 @@ Detect EC2 snapshots being made public.
 
 Public snapshots can expose sensitive data volumes.
 """
+
 import sys
 import os
 
@@ -20,12 +21,7 @@ def rule(event):
 
     # Check if createVolumePermission was modified to add "all" group
     add_group = deep_get(
-        event,
-        "requestParameters",
-        "createVolumePermission",
-        "add",
-        "items",
-        default=[]
+        event, "requestParameters", "createVolumePermission", "add", "items", default=[]
     )
 
     # Check if "all" group was added

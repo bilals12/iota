@@ -3,6 +3,7 @@ Detect VPC Flow Logs being disabled or deleted.
 
 Flow logs are critical for network forensics - disabling them is suspicious.
 """
+
 import sys
 import os
 
@@ -17,7 +18,9 @@ def rule(event):
 
 def title(event):
     """Generate alert title"""
-    flow_log_ids = deep_get(event, "requestParameters", "DeleteFlowLogsRequest", "FlowLogId", default=[])
+    flow_log_ids = deep_get(
+        event, "requestParameters", "DeleteFlowLogsRequest", "FlowLogId", default=[]
+    )
     if isinstance(flow_log_ids, list):
         flow_log_str = ", ".join(flow_log_ids[:3])  # Show first 3
         if len(flow_log_ids) > 3:

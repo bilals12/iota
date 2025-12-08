@@ -3,6 +3,7 @@ Detect Network ACL modifications.
 
 NACL changes can expose resources or block legitimate traffic.
 """
+
 import sys
 import os
 

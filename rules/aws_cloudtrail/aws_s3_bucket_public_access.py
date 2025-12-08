@@ -3,6 +3,7 @@ Detect S3 bucket made publicly accessible.
 
 Detects when S3 buckets are configured to allow public access.
 """
+
 import sys
 import os
 
@@ -18,7 +19,14 @@ def rule(event):
     # Check for public access operations
     if event.get("eventName") in ["PutBucketAcl", "PutBucketPolicy"]:
         # Check for AllUsers or AuthenticatedUsers grants
-        acl = deep_get(event, "requestParameters", "AccessControlPolicy", "AccessControlList", "Grant", default=[])
+        acl = deep_get(
+            event,
+            "requestParameters",
+            "AccessControlPolicy",
+            "AccessControlList",
+            "Grant",
+            default=[],
+        )
         if isinstance(acl, list):
             for grant in acl:
                 grantee_uri = deep_get(grant, "Grantee", "URI", default="")
@@ -27,7 +35,9 @@ def rule(event):
 
     # Check for public access block being disabled
     if event.get("eventName") == "PutPublicAccessBlock":
-        config = deep_get(event, "requestParameters", "PublicAccessBlockConfiguration", default={})
+        config = deep_get(
+            event, "requestParameters", "PublicAccessBlockConfiguration", default={}
+        )
         # Alert if any protection is disabled
         if not config.get("BlockPublicAcls") or not config.get("BlockPublicPolicy"):
             return True
@@ -40,7 +50,9 @@ def title(event):
     bucket = deep_get(event, "requestParameters", "bucketName", default="UNKNOWN")
     event_name = event.get("eventName", "UNKNOWN")
     actor_arn = deep_get(event, "userIdentity", "arn", default="UNKNOWN")
-    return f"S3 bucket [{bucket}] public access change via {event_name} by [{actor_arn}]"
+    return (
+        f"S3 bucket [{bucket}] public access change via {event_name} by [{actor_arn}]"
+    )
 
 
 def severity():

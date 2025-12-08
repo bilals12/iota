@@ -3,6 +3,7 @@ Detect VPC gateway modifications (internet/NAT gateways).
 
 Gateway changes can enable data exfiltration from isolated networks.
 """
+
 import sys
 import os
 
@@ -31,8 +32,13 @@ def title(event):
 
     if "InternetGateway" in event_name:
         gateway_id = deep_get(
-            event, "responseElements", "internetGateway", "internetGatewayId",
-            default=deep_get(event, "requestParameters", "internetGatewayId", default="UNKNOWN")
+            event,
+            "responseElements",
+            "internetGateway",
+            "internetGatewayId",
+            default=deep_get(
+                event, "requestParameters", "internetGatewayId", default="UNKNOWN"
+            ),
         )
         vpc_id = deep_get(event, "requestParameters", "vpcId", default="N/A")
         gateway_type = "Internet Gateway"

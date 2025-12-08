@@ -3,6 +3,7 @@ Detect unauthorized API calls (AccessDenied errors).
 
 Multiple AccessDenied errors can indicate reconnaissance or privilege escalation attempts.
 """
+
 import sys
 import os
 

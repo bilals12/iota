@@ -4,15 +4,15 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.0"
+      version = "6.0.0"
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
-      version = "~> 2.23"
+      version = "2.35.1"
     }
     helm = {
       source  = "hashicorp/helm"
-      version = "~> 2.11"
+      version = "2.17.0"
     }
   }
 }
@@ -131,29 +131,29 @@ resource "kubernetes_persistent_volume_claim" "events" {
 
 # Helm release
 resource "helm_release" "iota" {
-  name       = "iota"
-  namespace  = var.namespace
-  chart      = var.helm_chart_path
-  version    = var.helm_chart_version
+  name      = "iota"
+  namespace = var.namespace
+  chart     = var.helm_chart_path
+  version   = var.helm_chart_version
 
   values = [
     templatefile("${path.module}/values.yaml.tpl", {
-      image_repository    = var.image_repository
-      image_tag          = var.image_tag
-      replicas           = var.replicas
-      iam_role_arn       = aws_iam_role.iota.arn
-      service_account    = var.service_account_name
-      rules_repo         = var.rules_repo
-      rules_branch       = var.rules_branch
-      rules_path         = var.rules_path
-      slack_enabled      = var.slack_webhook_url != ""
-      events_pvc         = var.create_events_pvc ? kubernetes_persistent_volume_claim.events[0].metadata[0].name : var.existing_events_pvc
-      state_pvc_size     = var.state_pvc_size
-      storage_class      = var.storage_class
-      cpu_request        = var.cpu_request
-      cpu_limit          = var.cpu_limit
-      memory_request     = var.memory_request
-      memory_limit       = var.memory_limit
+      image_repository = var.image_repository
+      image_tag        = var.image_tag
+      replicas         = var.replicas
+      iam_role_arn     = aws_iam_role.iota.arn
+      service_account  = var.service_account_name
+      rules_repo       = var.rules_repo
+      rules_branch     = var.rules_branch
+      rules_path       = var.rules_path
+      slack_enabled    = var.slack_webhook_url != ""
+      events_pvc       = var.create_events_pvc ? kubernetes_persistent_volume_claim.events[0].metadata[0].name : var.existing_events_pvc
+      state_pvc_size   = var.state_pvc_size
+      storage_class    = var.storage_class
+      cpu_request      = var.cpu_request
+      cpu_limit        = var.cpu_limit
+      memory_request   = var.memory_request
+      memory_limit     = var.memory_limit
     })
   ]
 

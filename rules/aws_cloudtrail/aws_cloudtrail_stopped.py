@@ -3,6 +3,7 @@ Detect CloudTrail being stopped or deleted.
 
 Attackers often disable logging to cover their tracks. This detects CloudTrail modifications.
 """
+
 import sys
 import os
 

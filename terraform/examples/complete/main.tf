@@ -4,7 +4,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.0"
+      version = "6.0.0"
     }
   }
 }
@@ -41,9 +41,9 @@ provider "helm" {
 module "iota" {
   source = "../.."
 
-  cluster_name       = var.cluster_name
-  oidc_provider_arn  = var.oidc_provider_arn
-  cloudtrail_bucket  = var.cloudtrail_bucket
+  cluster_name      = var.cluster_name
+  oidc_provider_arn = var.oidc_provider_arn
+  cloudtrail_bucket = var.cloudtrail_bucket
 
   namespace            = "security"
   service_account_name = "iota"
@@ -73,25 +73,4 @@ module "iota" {
     Team        = "security"
     ManagedBy   = "terraform"
   }
-}
-
-# Outputs
-output "iota_iam_role_arn" {
-  description = "IAM role ARN for iota ServiceAccount"
-  value       = module.iota.iam_role_arn
-}
-
-output "iota_namespace" {
-  description = "Namespace where iota is deployed"
-  value       = module.iota.namespace
-}
-
-output "iota_service_account" {
-  description = "ServiceAccount name"
-  value       = module.iota.service_account_name
-}
-
-output "events_pvc_name" {
-  description = "Name of the events PVC"
-  value       = module.iota.events_pvc_name
 }

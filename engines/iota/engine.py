@@ -2,10 +2,10 @@
 
 import json
 import sys
-import os
 import importlib.util
 from pathlib import Path
 from typing import Dict, List, Any
+
 
 class Rule:
     def __init__(self, path: Path):
@@ -20,7 +20,7 @@ class Rule:
         return module
 
     def matches(self, event: Dict[str, Any]) -> bool:
-        if not hasattr(self.module, 'rule'):
+        if not hasattr(self.module, "rule"):
             return False
         try:
             return bool(self.module.rule(event))
@@ -28,7 +28,7 @@ class Rule:
             return False
 
     def get_title(self, event: Dict[str, Any]) -> str:
-        if not hasattr(self.module, 'title'):
+        if not hasattr(self.module, "title"):
             return self.rule_id
         try:
             return str(self.module.title(event))
@@ -36,7 +36,7 @@ class Rule:
             return self.rule_id
 
     def get_severity(self) -> str:
-        if hasattr(self.module, 'severity'):
+        if hasattr(self.module, "severity"):
             try:
                 return str(self.module.severity())
             except Exception:
@@ -44,12 +44,13 @@ class Rule:
         return "INFO"
 
     def get_dedup(self, event: Dict[str, Any]) -> str:
-        if not hasattr(self.module, 'dedup'):
+        if not hasattr(self.module, "dedup"):
             return self.rule_id
         try:
             return str(self.module.dedup(event))
         except Exception:
             return self.rule_id
+
 
 class Engine:
     def __init__(self, rules_dir: str):
@@ -72,14 +73,17 @@ class Engine:
         for event in events:
             for rule in self.rules:
                 if rule.matches(event):
-                    matches.append({
-                        "rule_id": rule.rule_id,
-                        "title": rule.get_title(event),
-                        "severity": rule.get_severity(),
-                        "dedup": rule.get_dedup(event),
-                        "event": event
-                    })
+                    matches.append(
+                        {
+                            "rule_id": rule.rule_id,
+                            "title": rule.get_title(event),
+                            "severity": rule.get_severity(),
+                            "dedup": rule.get_dedup(event),
+                            "event": event,
+                        }
+                    )
         return matches
+
 
 def main():
     request = json.load(sys.stdin)
@@ -91,6 +95,7 @@ def main():
 
     response = {"matches": matches}
     json.dump(response, sys.stdout)
+
 
 if __name__ == "__main__":
     main()

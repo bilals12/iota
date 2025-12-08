@@ -3,6 +3,7 @@ Detect AWS Config being disabled or deleted.
 
 Config tracks resource changes - disabling it is suspicious.
 """
+
 import sys
 import os
 

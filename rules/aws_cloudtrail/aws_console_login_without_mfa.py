@@ -3,6 +3,7 @@ Detect console login without MFA.
 
 MFA should be required for all console access - this detects non-MFA logins.
 """
+
 import sys
 import os
 
@@ -38,9 +39,12 @@ def rule(event):
 
     # Check MFA usage (inverted logic because second condition can be None)
     mfa_used = additional_event_data.get("MFAUsed") != "Yes"
-    mfa_authenticated = deep_get(
-        event, "userIdentity", "sessionContext", "attributes", "mfaAuthenticated"
-    ) != "true"
+    mfa_authenticated = (
+        deep_get(
+            event, "userIdentity", "sessionContext", "attributes", "mfaAuthenticated"
+        )
+        != "true"
+    )
 
     return mfa_used and mfa_authenticated
 
@@ -51,10 +55,20 @@ def title(event):
         user_string = "the root user"
     else:
         user = deep_get(event, "userIdentity", "userName") or deep_get(
-            event, "userIdentity", "sessionContext", "sessionIssuer", "userName", default="UNKNOWN"
+            event,
+            "userIdentity",
+            "sessionContext",
+            "sessionIssuer",
+            "userName",
+            default="UNKNOWN",
         )
         user_type = deep_get(
-            event, "userIdentity", "sessionContext", "sessionIssuer", "type", default="user"
+            event,
+            "userIdentity",
+            "sessionContext",
+            "sessionIssuer",
+            "type",
+            default="user",
         ).lower()
         user_string = f"{user_type} {user}"
 

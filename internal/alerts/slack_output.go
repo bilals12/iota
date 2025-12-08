@@ -67,13 +67,13 @@ func (s *SlackOutput) formatMessage(alert *alertforwarder.Alert) slackMessage {
 			Short: true,
 		},
 		{
-			Title: "alert count",
-			Value: fmt.Sprintf("%d", alert.AlertCount),
+			Title: "alert id",
+			Value: alert.AlertID,
 			Short: true,
 		},
 		{
-			Title: "alert id",
-			Value: alert.AlertID,
+			Title: "dedup key",
+			Value: alert.DedupKey,
 			Short: true,
 		},
 	}

@@ -3,6 +3,7 @@ Detect EBS snapshot deletion.
 
 Snapshot deletion can indicate data destruction or ransomware preparation.
 """
+
 import sys
 import os
 

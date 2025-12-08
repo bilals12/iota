@@ -3,6 +3,7 @@ Detect EC2 instance user data modification.
 
 User data can be used to establish persistence on instances.
 """
+
 import sys
 import os
 

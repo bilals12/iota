@@ -3,6 +3,7 @@ Detect Lambda function code or configuration changes.
 
 Lambda modifications can indicate backdoors or malicious code injection.
 """
+
 import sys
 import os
 
@@ -23,14 +24,15 @@ def rule(event):
 def title(event):
     """Generate alert title"""
     event_name = event.get("eventName", "UNKNOWN").replace("20150331v2", "")
-    function_name = deep_get(event, "requestParameters", "functionName", default="UNKNOWN")
+    function_name = deep_get(
+        event, "requestParameters", "functionName", default="UNKNOWN"
+    )
     actor_arn = deep_get(event, "userIdentity", "arn", default="UNKNOWN")
     return f"Lambda function [{function_name}] {event_name} by [{actor_arn}]"
 
 
-def severity():
+def severity(event):
     """Return alert severity"""
-    # CreateFunction and UpdateFunctionCode are higher risk
     event_name = event.get("eventName", "")
     if "UpdateFunctionCode" in event_name or "CreateFunction" in event_name:
         return "HIGH"

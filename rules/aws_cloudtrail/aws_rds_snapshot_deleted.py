@@ -3,6 +3,7 @@ Detect RDS snapshot deletion.
 
 Snapshot deletion can indicate data destruction or ransomware preparation.
 """
+
 import sys
 import os
 
@@ -44,8 +45,7 @@ def severity():
 def alert_context(event):
     """Additional context for the alert"""
     context = aws_rule_context(event)
-    context["snapshotIdentifier"] = (
-        deep_get(event, "requestParameters", "dBSnapshotIdentifier")
-        or deep_get(event, "requestParameters", "dBClusterSnapshotIdentifier")
-    )
+    context["snapshotIdentifier"] = deep_get(
+        event, "requestParameters", "dBSnapshotIdentifier"
+    ) or deep_get(event, "requestParameters", "dBClusterSnapshotIdentifier")
     return context

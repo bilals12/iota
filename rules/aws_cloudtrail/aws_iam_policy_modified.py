@@ -3,6 +3,7 @@ Detect IAM policy modifications.
 
 Policy changes can grant excessive permissions.
 """
+
 import sys
 import os
 
@@ -28,11 +29,11 @@ def title(event):
 
     # Extract the target entity
     target = (
-        deep_get(event, "requestParameters", "userName") or
-        deep_get(event, "requestParameters", "roleName") or
-        deep_get(event, "requestParameters", "groupName") or
-        deep_get(event, "requestParameters", "policyArn") or
-        "UNKNOWN"
+        deep_get(event, "requestParameters", "userName")
+        or deep_get(event, "requestParameters", "roleName")
+        or deep_get(event, "requestParameters", "groupName")
+        or deep_get(event, "requestParameters", "policyArn")
+        or "UNKNOWN"
     )
 
     return f"IAM policy {event_name} on [{target}] by [{actor_arn}]"

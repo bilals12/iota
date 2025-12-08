@@ -3,6 +3,7 @@ Detect SSM Run Command being executed.
 
 SSM Run Command allows remote code execution on EC2 instances - critical to monitor.
 """
+
 import sys
 import os
 

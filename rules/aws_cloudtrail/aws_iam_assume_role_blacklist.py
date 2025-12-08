@@ -3,6 +3,7 @@ Detect AssumeRole from suspicious principals or to sensitive roles.
 
 Monitor role assumptions that could indicate privilege escalation or lateral movement.
 """
+
 import sys
 import os
 

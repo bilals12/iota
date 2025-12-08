@@ -3,6 +3,7 @@ Detect RDS snapshots being shared publicly.
 
 Public RDS snapshots can expose sensitive database data.
 """
+
 import sys
 import os
 
@@ -19,9 +20,7 @@ def rule(event):
         return False
 
     # Check if snapshot is being shared with "all" (public)
-    values_to_add = deep_get(
-        event, "requestParameters", "valuesToAdd", default=[]
-    )
+    values_to_add = deep_get(event, "requestParameters", "valuesToAdd", default=[])
 
     return "all" in values_to_add
 
@@ -43,13 +42,7 @@ def severity():
 def alert_context(event):
     """Additional context for the alert"""
     context = aws_rule_context(event)
-    context["snapshotId"] = deep_get(
-        event, "requestParameters", "dBSnapshotIdentifier"
-    )
-    context["attributeName"] = deep_get(
-        event, "requestParameters", "attributeName"
-    )
-    context["valuesToAdd"] = deep_get(
-        event, "requestParameters", "valuesToAdd"
-    )
+    context["snapshotId"] = deep_get(event, "requestParameters", "dBSnapshotIdentifier")
+    context["attributeName"] = deep_get(event, "requestParameters", "attributeName")
+    context["valuesToAdd"] = deep_get(event, "requestParameters", "valuesToAdd")
     return context

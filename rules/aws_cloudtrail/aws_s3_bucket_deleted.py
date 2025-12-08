@@ -3,6 +3,7 @@ Detect S3 bucket deletion.
 
 Bucket deletion can indicate data destruction attacks or account cleanup by adversaries.
 """
+
 import sys
 import os
 
