@@ -88,6 +88,11 @@ func (p *Processor) processReader(ctx context.Context, reader io.Reader, events 
 		return p.processCloudTrailRecords(ctx, cloudTrailFile.Records, events)
 	}
 
+	var jsonArray []json.RawMessage
+	if err := json.Unmarshal(data, &jsonArray); err == nil && len(jsonArray) > 0 {
+		return p.processCloudTrailRecords(ctx, jsonArray, events)
+	}
+
 	return p.processLineByLine(ctx, data, events)
 }
 

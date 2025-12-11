@@ -69,6 +69,7 @@ func (p *OktaParser) ParseLog(log string) ([]*cloudtrail.Event, error) {
 		"outcome":               event.Outcome,
 		"target":                event.Target,
 		"transaction":           event.Transaction,
+		"debugContext":          event.DebugContext,
 		"authenticationContext": event.AuthenticationContext,
 		"securityContext":       event.SecurityContext,
 	}
@@ -97,7 +98,7 @@ type OktaLogEvent struct {
 	UUID                  *string                    `json:"uuid"`
 	Published             *timestamp.RFC3339         `json:"published"`
 	EventType             *string                    `json:"eventType"`
-	Version               *string                    `json:"version"`
+	Version               interface{}                `json:"version"`
 	Severity              *string                    `json:"severity"`
 	LegacyEventType       *string                    `json:"legacyEventType,omitempty"`
 	DisplayMessage        *string                    `json:"displayMessage,omitempty"`

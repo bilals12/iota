@@ -71,18 +71,29 @@ class Engine:
     def analyze(self, events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         matches = []
         for event in events:
+            rule_event = self._unwrap_event(event)
             for rule in self.rules:
-                if rule.matches(event):
+                if rule.matches(rule_event):
                     matches.append(
                         {
                             "rule_id": rule.rule_id,
-                            "title": rule.get_title(event),
+                            "title": rule.get_title(rule_event),
                             "severity": rule.get_severity(),
-                            "dedup": rule.get_dedup(event),
+                            "dedup": rule.get_dedup(rule_event),
                             "event": event,
                         }
                     )
         return matches
+
+    def _unwrap_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
+        event_source = event.get("eventSource", "")
+        if event_source == "okta.com":
+            return event.get("requestParameters", event)
+        if event_source == "gsuite.google.com":
+            return event.get("requestParameters", event)
+        if event_source == "1password.com":
+            return event.get("requestParameters", event)
+        return event
 
 
 def main():
