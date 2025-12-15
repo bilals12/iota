@@ -111,3 +111,128 @@ def pattern_match_list(strings_to_check, pattern_list):
         if pattern_match(string, pattern_list):
             return True
     return False
+
+
+def get_actor_user(event):
+    """
+    Extract actor/user from various log types.
+    Works with CloudTrail, Okta, GSuite, 1Password.
+    """
+    # CloudTrail
+    user_identity = event.get("userIdentity", {})
+    if user_identity:
+        identity_type = user_identity.get("type")
+        if identity_type == "IAMUser":
+            return user_identity.get("userName", "<UNKNOWN>")
+        if identity_type == "AssumedRole":
+            session_context = user_identity.get("sessionContext", {})
+            session_issuer = session_context.get("sessionIssuer", {})
+            if session_issuer.get("userName"):
+                return session_issuer.get("userName")
+            arn = user_identity.get("arn", "")
+            return arn.split("/")[-1] if arn else "<UNKNOWN>"
+        if identity_type == "Root":
+            return "root"
+        if identity_type == "AWSService":
+            return user_identity.get("invokedBy", "<AWS_SERVICE>")
+        return user_identity.get("arn", "<UNKNOWN>").split("/")[-1]
+
+    # Okta
+    actor = event.get("actor", {})
+    if actor:
+        return actor.get("alternateId") or actor.get("displayName") or "<UNKNOWN>"
+
+    # GSuite
+    if "actor" in event and "email" in event.get("actor", {}):
+        return event["actor"]["email"]
+
+    # 1Password
+    if "user" in event:
+        user = event["user"]
+        return user.get("email") or user.get("name") or "<UNKNOWN>"
+
+    return "<UNKNOWN>"
+
+
+def get_source_ip(event):
+    """Extract source IP from various log types."""
+    # CloudTrail
+    if "sourceIPAddress" in event:
+        return event["sourceIPAddress"]
+
+    # Okta
+    client = event.get("client", {})
+    if client and "ipAddress" in client:
+        return client["ipAddress"]
+
+    # GSuite
+    if "ipAddress" in event:
+        return event["ipAddress"]
+
+    # 1Password
+    if "client" in event and "ip_address" in event.get("client", {}):
+        return event["client"]["ip_address"]
+
+    return "<UNKNOWN>"
+
+
+def okta_alert_context(event):
+    """Generate standard Okta alert context."""
+    return {
+        "eventType": event.get("eventType"),
+        "uuid": event.get("uuid"),
+        "published": event.get("published"),
+        "severity": event.get("severity"),
+        "displayMessage": event.get("displayMessage"),
+        "actor": event.get("actor", {}),
+        "client": event.get("client", {}),
+        "outcome": event.get("outcome", {}),
+        "target": event.get("target", []),
+        "sourceIPAddress": deep_get(event, "client", "ipAddress"),
+        "userAgent": deep_get(event, "client", "userAgent", "rawUserAgent"),
+    }
+
+
+def get_okta_actor(event):
+    """Get actor information from Okta event as a dict."""
+    return {
+        "id": deep_get(event, "actor", "id"),
+        "type": deep_get(event, "actor", "type"),
+        "alternateId": deep_get(event, "actor", "alternateId"),
+        "displayName": deep_get(event, "actor", "displayName"),
+    }
+
+
+def get_okta_target(event, index=0):
+    """Get target information from Okta event."""
+    targets = event.get("target", [])
+    if not targets or index >= len(targets):
+        return {}
+    return targets[index]
+
+
+def get_okta_user_agent(event):
+    """Extract user agent from Okta event."""
+    return deep_get(event, "client", "userAgent", "rawUserAgent")
+
+
+def is_okta_success(event):
+    """Check if Okta event was successful."""
+    outcome = event.get("outcome", {})
+    return outcome.get("result") == "SUCCESS"
+
+
+def is_okta_failure(event):
+    """Check if Okta event failed."""
+    outcome = event.get("outcome", {})
+    return outcome.get("result") == "FAILURE"
+
+
+def get_okta_target_users(event):
+    """Extract target users from Okta event."""
+    targets = event.get("target", [])
+    users = []
+    for target in targets:
+        if target.get("type") == "User":
+            users.append(target.get("alternateId") or target.get("displayName"))
+    return users
