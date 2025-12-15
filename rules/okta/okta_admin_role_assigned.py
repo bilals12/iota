@@ -9,8 +9,7 @@ import sys
 import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "helpers"))
-from iota_helpers import deep_get
-from okta_helpers import okta_alert_context, is_okta_success
+from iota_helpers import deep_get, okta_alert_context, is_okta_success
 
 ADMIN_PATTERN = re.compile(r"[aA]dministrator")
 

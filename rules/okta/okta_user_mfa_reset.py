@@ -9,7 +9,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "helpers"))
 from iota_helpers import deep_get
-from okta_helpers import okta_alert_context
+from iota_helpers import okta_alert_context
 
 
 def rule(event):
