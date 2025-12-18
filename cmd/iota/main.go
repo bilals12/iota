@@ -24,10 +24,106 @@ import (
 )
 
 func main() {
+	// Check if first arg is "query" subcommand
+	if len(os.Args) > 1 && os.Args[0] != "-h" && os.Args[1] == "query" {
+		if err := runQueryCmd(); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func runQueryCmd() error {
+	fs := flag.NewFlagSet("query", flag.ExitOnError)
+	sql := fs.String("sql", "", "SQL query to execute (use {TABLE} as placeholder)")
+	logType := fs.String("log-type", "cloudtrail", "Log type to query")
+	last := fs.String("last", "24h", "Query last duration (e.g., 7d, 24h, 1h)")
+	startTime := fs.String("start", "", "Start time (RFC3339 format)")
+	endTime := fs.String("end", "", "End time (RFC3339 format)")
+	output := fs.String("output", "table", "Output format: table, json, csv")
+	forceAthena := fs.Bool("force-athena", false, "Force Athena backend")
+	forceDuckDB := fs.Bool("force-duckdb", false, "Force DuckDB backend")
+	s3Bucket := fs.String("s3-bucket", os.Getenv("IOTA_S3_BUCKET"), "S3 bucket for data lake")
+	s3Region := fs.String("aws-region", getEnvOrDefault("AWS_REGION", "us-east-1"), "AWS region")
+	memoryLimit := fs.String("memory-limit", "4GB", "DuckDB memory limit")
+	workgroup := fs.String("athena-workgroup", os.Getenv("IOTA_ATHENA_WORKGROUP"), "Athena workgroup")
+	database := fs.String("athena-database", os.Getenv("IOTA_ATHENA_DATABASE"), "Athena/Glue database")
+	resultBucket := fs.String("athena-result-bucket", os.Getenv("IOTA_ATHENA_RESULT_BUCKET"), "S3 bucket for Athena results")
+
+	if err := fs.Parse(os.Args[2:]); err != nil {
+		return err
+	}
+
+	cfg := QueryConfig{
+		SQL:          *sql,
+		LogType:      *logType,
+		OutputFormat: *output,
+		ForceAthena:  *forceAthena,
+		ForceDuckDB:  *forceDuckDB,
+		S3Region:     *s3Region,
+		S3Bucket:     *s3Bucket,
+		MemoryLimit:  *memoryLimit,
+		Workgroup:    *workgroup,
+		Database:     *database,
+		ResultBucket: *resultBucket,
+	}
+
+	// Parse time range
+	if *startTime != "" && *endTime != "" {
+		start, err := time.Parse(time.RFC3339, *startTime)
+		if err != nil {
+			return fmt.Errorf("invalid start time: %w", err)
+		}
+		end, err := time.Parse(time.RFC3339, *endTime)
+		if err != nil {
+			return fmt.Errorf("invalid end time: %w", err)
+		}
+		cfg.StartTime = start
+		cfg.EndTime = end
+	} else {
+		duration, err := parseDuration(*last)
+		if err != nil {
+			return fmt.Errorf("invalid duration: %w", err)
+		}
+		cfg.Last = duration
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		cancel()
+	}()
+
+	return runQuery(ctx, cfg)
+}
+
+func getEnvOrDefault(key, defaultVal string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return defaultVal
+}
+
+func parseDuration(s string) (time.Duration, error) {
+	// Support "7d" style durations
+	if len(s) > 1 && s[len(s)-1] == 'd' {
+		days, err := time.ParseDuration(s[:len(s)-1] + "h")
+		if err != nil {
+			return 0, err
+		}
+		return days * 24, nil
+	}
+	return time.ParseDuration(s)
 }
 
 func run() error {
