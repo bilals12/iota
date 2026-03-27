@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/bilals12/iota/compare/v0.2.0...v0.3.0) (2026-03-27)
+
+
+### Features
+
+* unify release workflow and document Release Please token ([76d7a3e](https://github.com/bilals12/iota/commit/76d7a3e987c2495f6a69855c765255332bacb440))
+
 ## [0.2.0](https://github.com/bilals12/iota/compare/v0.1.0...v0.2.0) (2026-03-27)
 
 ### Features
