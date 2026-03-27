@@ -1,7 +1,8 @@
 FROM golang:1.24-alpine AS builder
 
+# g++ provides libstdc++ for linking go-duckdb (CGO).
 # hadolint ignore=DL3018
-RUN apk add --no-cache gcc musl-dev sqlite-dev python3
+RUN apk add --no-cache gcc g++ musl-dev sqlite-dev python3
 
 WORKDIR /build
 
@@ -15,7 +16,7 @@ RUN CGO_ENABLED=1 go build -o iota ./cmd/iota
 FROM alpine:3.19
 
 # hadolint ignore=DL3018
-RUN apk add --no-cache python3 sqlite-libs ca-certificates
+RUN apk add --no-cache python3 sqlite-libs ca-certificates libstdc++
 
 WORKDIR /app
 
