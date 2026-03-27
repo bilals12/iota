@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.2.0](https://github.com/bilals12/iota/compare/v0.1.0...v0.2.0) (2026-03-27)
+
+
+### Features
+
+* add DuckDB query engine for fast historical queries ([3370357](https://github.com/bilals12/iota/commit/3370357383a887a84bb20614cad7ec135913b856))
+* add S3 ransomware/exfil and Okta security detection rules ([dabec7e](https://github.com/bilals12/iota/commit/dabec7e6584078f158aca25b49b2a83c88f7b710))
+* adding eventbridge support and rules ([272805a](https://github.com/bilals12/iota/commit/272805a2a7cfefa48cf9b028b6233aa0bfbd98a2))
+* adding more okta rules ([5dd3a30](https://github.com/bilals12/iota/commit/5dd3a308730b8c1c545530e4582d1e1976b88aaa))
+* adding release please and unified release workflow ([#27](https://github.com/bilals12/iota/issues/27)) ([f72e832](https://github.com/bilals12/iota/commit/f72e832dc13ac83def799d64e15361248327b935))
+* bootstrap OpenSpec for spec-driven development ([1eb0319](https://github.com/bilals12/iota/commit/1eb0319e8c7476985b7fa45d5f2822a536431734))
+* pipeline architecture ([69293bb](https://github.com/bilals12/iota/commit/69293bbf26a6d61d77b13f3bbc4a8a5a90be4f49))
+* refactoring release workflows to prepare for major version releases ([86ff479](https://github.com/bilals12/iota/commit/86ff4791009f31d43a6e4e33fb4397401ba55b48))
+
+
+### Bug Fixes
+
+* **engine:** resolve severity(event) in Python rules engine ([#25](https://github.com/bilals12/iota/issues/25)) ([06dd143](https://github.com/bilals12/iota/commit/06dd143ae0d042f47d5d1eee899c79f0e9057d81))
+* okta event log parsing ([08403b4](https://github.com/bilals12/iota/commit/08403b484e7e5791db0887c2af3b54da59729039))
+
+## Changelog
+
 Releases and version bumps are managed by [Release Please](https://github.com/googleapis/release-please). Merge the release PR it opens to publish a version tag, GitHub Release notes, container images, and Linux binaries.
 
 ## Version bumps (conventional commits)
