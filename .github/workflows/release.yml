@@ -1,5 +1,5 @@
-# Push tag v*.*.* → GitHub Release (binaries) + Docker Hub (multi-arch).
-# Process: merge feat/fix to main, then git tag vX.Y.Z && git push origin vX.Y.Z
+# Tag push v*.*.* → Linux binaries on GitHub Release + Docker Hub (multi-arch).
+# Tags are created by merging a Release Please release PR (usual) or by manual `git tag`.
 
 name: Release
 
@@ -25,7 +25,6 @@ jobs:
         include:
           - runner: ubuntu-latest
             suffix: linux-amd64
-          # Native ARM (CGO + go-duckdb). Free tier: public repos; private may need a paid ARM runner or remove this row.
           - runner: ubuntu-24.04-arm
             suffix: linux-arm64
 
@@ -125,7 +124,7 @@ jobs:
             bilals12/iota@${{ needs.build-arm64.outputs.digest }}
 
   github-release:
-    name: GitHub Release
+    name: GitHub Release assets
     runs-on: ubuntu-latest
     needs: [build-binary]
 
@@ -140,12 +139,21 @@ jobs:
       - name: Make binaries executable
         run: chmod +x release-assets/iota-*
 
-      - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
-          generate_release_notes: true
-          files: |
-            release-assets/iota-linux-amd64
-            release-assets/iota-linux-arm64
+      - name: Attach binaries to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ github.ref_name }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" \
+              release-assets/iota-linux-amd64 \
+              release-assets/iota-linux-arm64 \
+              --clobber
+          else
+            gh release create "$TAG" \
+              release-assets/iota-linux-amd64 \
+              release-assets/iota-linux-arm64 \
+              --generate-notes \
+              --title "$TAG"
+          fi
