@@ -66,8 +66,13 @@ repos:
       - id: go-build
         fail_fast: true
       - id: go-test-unit
-      - id: docker-lint
       - id: docker-compose-lint
+
+  # Dockerfile lint (system binary — install: brew install hadolint)
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.14.0
+    hooks:
+      - id: hadolint
 
   # Official golangci-lint hook
   - repo: https://github.com/golangci/golangci-lint
