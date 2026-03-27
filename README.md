@@ -64,7 +64,7 @@ okta/1password/sailpoint → eventbridge partner bus → sqs queue → iota proc
 
 ### prerequisites
 
-- go 1.23+
+- go 1.24+
 - python 3.11+
 - aws credentials with cloudtrail s3 read access
 

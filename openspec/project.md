@@ -6,7 +6,7 @@ iota is a self-hosted security detection engine that mirrors Panther SIEM capabi
 
 ## Tech Stack
 
-- **Language**: Go 1.23+ (core engine), Python 3.11+ (detection rules)
+- **Language**: Go 1.24+ (core engine), Python 3.11+ (detection rules)
 - **Database**: SQLite (state tracking, alert deduplication)
 - **Infrastructure**: Terraform, Kubernetes (EKS/ECS/Fargate)
 - **CI/CD**: GitHub Actions, Docker Hub
