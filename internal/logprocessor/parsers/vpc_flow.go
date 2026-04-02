@@ -22,7 +22,7 @@ var vpcFlowHeaders = map[string]struct{}{
 	"dstaddr":      {},
 	"srcport":      {},
 	"dstport":      {},
-	"protocol":    {},
+	"protocol":     {},
 	"packets":      {},
 	"bytes":        {},
 	"start":        {},

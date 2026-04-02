@@ -32,9 +32,9 @@ type slackTextNode struct {
 }
 
 type slackAttachment struct {
-	Color  string              `json:"color"`
-	Blocks []slackBlock        `json:"blocks,omitempty"`
-	Fields []slackAttachField  `json:"fields,omitempty"`
+	Color  string             `json:"color"`
+	Blocks []slackBlock       `json:"blocks,omitempty"`
+	Fields []slackAttachField `json:"fields,omitempty"`
 }
 
 type slackAttachField struct {

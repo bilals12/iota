@@ -17,22 +17,22 @@ import (
 )
 
 type S3Poller struct {
-	client      *s3.Client
-	bucket      string
-	prefix      string
-	db          *sql.DB
-	handler     func(io.Reader) error
-	interval    time.Duration
-	region      string
+	client   *s3.Client
+	bucket   string
+	prefix   string
+	db       *sql.DB
+	handler  func(io.Reader) error
+	interval time.Duration
+	region   string
 }
 
 type Config struct {
-	Bucket   string
-	Prefix   string
+	Bucket    string
+	Prefix    string
 	StateFile string
-	Handler  func(io.Reader) error
-	Interval time.Duration
-	Region   string
+	Handler   func(io.Reader) error
+	Interval  time.Duration
+	Region    string
 }
 
 func New(ctx context.Context, cfg Config) (*S3Poller, error) {

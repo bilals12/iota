@@ -6,24 +6,24 @@ import (
 
 func TestParseCloudTrailS3Key(t *testing.T) {
 	tests := []struct {
-		name      string
-		key       string
-		wantValid bool
-		wantAcct  string
+		name       string
+		key        string
+		wantValid  bool
+		wantAcct   string
 		wantRegion string
 	}{
 		{
-			name:      "organization trail",
-			key:       "AWSLogs/o-f4709b1n6a/655631470870/CloudTrail/us-east-1/2025/12/01/655631470870_CloudTrail_us-east-1_20251201T0005Z_abc123.json.gz",
-			wantValid: true,
-			wantAcct:  "655631470870",
+			name:       "organization trail",
+			key:        "AWSLogs/o-f4709b1n6a/655631470870/CloudTrail/us-east-1/2025/12/01/655631470870_CloudTrail_us-east-1_20251201T0005Z_abc123.json.gz",
+			wantValid:  true,
+			wantAcct:   "655631470870",
 			wantRegion: "us-east-1",
 		},
 		{
-			name:      "single account trail",
-			key:       "AWSLogs/123456789012/CloudTrail/us-west-2/2024/12/01/123456789012_CloudTrail_us-west-2_20241201T0005Z_xyz789.json.gz",
-			wantValid: true,
-			wantAcct:  "123456789012",
+			name:       "single account trail",
+			key:        "AWSLogs/123456789012/CloudTrail/us-west-2/2024/12/01/123456789012_CloudTrail_us-west-2_20241201T0005Z_xyz789.json.gz",
+			wantValid:  true,
+			wantAcct:   "123456789012",
 			wantRegion: "us-west-2",
 		},
 		{
@@ -68,11 +68,11 @@ func TestParseCloudTrailS3Key(t *testing.T) {
 
 func TestExtractAccountRegionFromKey(t *testing.T) {
 	tests := []struct {
-		name        string
-		key         string
-		wantAcct    string
-		wantRegion  string
-		wantErr     bool
+		name       string
+		key        string
+		wantAcct   string
+		wantRegion string
+		wantErr    bool
 	}{
 		{
 			name:       "valid organization trail",

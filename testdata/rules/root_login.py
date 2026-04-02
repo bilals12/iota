@@ -4,8 +4,10 @@ def rule(event):
         and event.get("userIdentity", {}).get("type") == "Root"
     )
 
+
 def title(event):
     return f"root login from {event.get('sourceIPAddress')}"
+
 
 def severity():
     return "HIGH"

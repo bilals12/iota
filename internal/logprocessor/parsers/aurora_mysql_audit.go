@@ -54,9 +54,9 @@ func (p *AuroraMySQLAuditParser) ParseLog(log string) ([]*cloudtrail.Event, erro
 		"connectionId": CsvStringToIntPointer(record[4]),
 		"queryId":      CsvStringToIntPointer(record[5]),
 		"operation":    CsvStringToPointer(record[6]),
-		"database":    CsvStringToPointer(record[7]),
-		"object":      CsvStringToPointer(objectString),
-		"retCode":     CsvStringToIntPointer(record[len(record)-1]),
+		"database":     CsvStringToPointer(record[7]),
+		"object":       CsvStringToPointer(objectString),
+		"retCode":      CsvStringToIntPointer(record[len(record)-1]),
 	}
 
 	eventID := fmt.Sprintf("aurora-%s", timeStamp.Time().Format("20060102150405"))

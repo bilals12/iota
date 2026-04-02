@@ -50,11 +50,11 @@ func buildEventSourceMap() map[string]string {
 		"logs.amazonaws.com":                 "AWS.CloudWatchLogs",
 		"guardduty.amazonaws.com":            "AWS.GuardDuty",
 		"config.amazonaws.com":               "AWS.Config",
-		"cloudformation.amazonaws.com":        "AWS.CloudFormation",
-		"elasticloadbalancing.amazonaws.com":  "AWS.ELB",
+		"cloudformation.amazonaws.com":       "AWS.CloudFormation",
+		"elasticloadbalancing.amazonaws.com": "AWS.ELB",
 		"redshift.amazonaws.com":             "AWS.Redshift",
 		"ecs.amazonaws.com":                  "AWS.ECS",
 		"secretsmanager.amazonaws.com":       "AWS.SecretsManager",
-		"ssm.amazonaws.com":                   "AWS.SSM",
+		"ssm.amazonaws.com":                  "AWS.SSM",
 	}
 }

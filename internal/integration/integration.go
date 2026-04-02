@@ -10,18 +10,18 @@ import (
 )
 
 type Integration struct {
-	ID              string
-	Type            string
-	Label           string
-	AWSAccountID    string
-	S3Bucket        string
-	S3Prefix        string
-	RoleARN         string
-	KMSKeyID        string
-	Enabled         bool
-	CreatedAt       time.Time
-	LastEventTime  *time.Time
-	EventStatus     string
+	ID            string
+	Type          string
+	Label         string
+	AWSAccountID  string
+	S3Bucket      string
+	S3Prefix      string
+	RoleARN       string
+	KMSKeyID      string
+	Enabled       bool
+	CreatedAt     time.Time
+	LastEventTime *time.Time
+	EventStatus   string
 }
 
 type Manager struct {
