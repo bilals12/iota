@@ -87,7 +87,7 @@ func (p *SQSProcessor) processMessage(ctx context.Context, message types.Message
 		SignatureVersion string `json:"SignatureVersion"`
 		Signature        string `json:"Signature"`
 		SigningCertURL   string `json:"SigningCertURL"`
-		UnsubscribeURL  string `json:"UnsubscribeURL"`
+		UnsubscribeURL   string `json:"UnsubscribeURL"`
 	}
 
 	if err := json.Unmarshal([]byte(*message.Body), &snsMessage); err != nil {
@@ -100,12 +100,12 @@ func (p *SQSProcessor) processMessage(ctx context.Context, message types.Message
 
 	var s3Notification struct {
 		Records []struct {
-			EventVersion      string `json:"eventVersion"`
-			EventSource       string `json:"eventSource"`
-			AWSRegion         string `json:"awsRegion"`
-			EventTime         string `json:"eventTime"`
-			EventName         string `json:"eventName"`
-			S3                struct {
+			EventVersion string `json:"eventVersion"`
+			EventSource  string `json:"eventSource"`
+			AWSRegion    string `json:"awsRegion"`
+			EventTime    string `json:"eventTime"`
+			EventName    string `json:"eventName"`
+			S3           struct {
 				Bucket struct {
 					Name string `json:"name"`
 				} `json:"bucket"`
@@ -136,7 +136,6 @@ func (p *SQSProcessor) processMessage(ctx context.Context, message types.Message
 
 	return nil
 }
-
 
 func ParseS3Notification(body string) ([]S3Object, error) {
 	var snsMessage struct {

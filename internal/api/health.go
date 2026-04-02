@@ -11,9 +11,9 @@ import (
 )
 
 type HealthServer struct {
-	server     *http.Server
-	readiness  ReadinessChecker
-	metrics    bool
+	server    *http.Server
+	readiness ReadinessChecker
+	metrics   bool
 }
 
 type ReadinessChecker interface {

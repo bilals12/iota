@@ -6,10 +6,10 @@ import (
 )
 
 type Event struct {
-	LogType         string                 `json:"logType"`
-	EventTime       time.Time              `json:"eventTime"`
-	EventID         string                 `json:"eventID,omitempty"`
-	Data            map[string]interface{} `json:"data"`
+	LogType   string                 `json:"logType"`
+	EventTime time.Time              `json:"eventTime"`
+	EventID   string                 `json:"eventID,omitempty"`
+	Data      map[string]interface{} `json:"data"`
 }
 
 func New(logType string, eventTime time.Time, data map[string]interface{}) *Event {
@@ -77,22 +77,22 @@ func (e *Event) ToCloudTrailEvent() (*CloudTrailEvent, error) {
 }
 
 type CloudTrailEvent struct {
-	EventVersion       string                 `json:"eventVersion"`
-	UserIdentity       map[string]interface{} `json:"userIdentity"`
-	EventTime          time.Time              `json:"eventTime"`
-	EventSource        string                 `json:"eventSource"`
-	EventName          string                 `json:"eventName"`
-	AWSRegion          string                 `json:"awsRegion"`
-	SourceIPAddress    string                 `json:"sourceIPAddress"`
-	UserAgent          string                 `json:"userAgent"`
-	ErrorCode          string                 `json:"errorCode,omitempty"`
-	ErrorMessage       string                 `json:"errorMessage,omitempty"`
-	RequestParameters  map[string]interface{} `json:"requestParameters,omitempty"`
-	ResponseElements   map[string]interface{} `json:"responseElements,omitempty"`
-	RequestID          string                 `json:"requestID"`
-	EventID            string                 `json:"eventID"`
-	EventType          string                 `json:"eventType"`
-	RecipientAccountID string                 `json:"recipientAccountId"`
+	EventVersion       string                   `json:"eventVersion"`
+	UserIdentity       map[string]interface{}   `json:"userIdentity"`
+	EventTime          time.Time                `json:"eventTime"`
+	EventSource        string                   `json:"eventSource"`
+	EventName          string                   `json:"eventName"`
+	AWSRegion          string                   `json:"awsRegion"`
+	SourceIPAddress    string                   `json:"sourceIPAddress"`
+	UserAgent          string                   `json:"userAgent"`
+	ErrorCode          string                   `json:"errorCode,omitempty"`
+	ErrorMessage       string                   `json:"errorMessage,omitempty"`
+	RequestParameters  map[string]interface{}   `json:"requestParameters,omitempty"`
+	ResponseElements   map[string]interface{}   `json:"responseElements,omitempty"`
+	RequestID          string                   `json:"requestID"`
+	EventID            string                   `json:"eventID"`
+	EventType          string                   `json:"eventType"`
+	RecipientAccountID string                   `json:"recipientAccountId"`
 	Resources          []map[string]interface{} `json:"resources,omitempty"`
 }
 
