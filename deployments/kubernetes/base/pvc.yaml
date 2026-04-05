@@ -9,4 +9,5 @@ spec:
   resources:
     requests:
       storage: 1Gi
-  storageClassName: gp3
+  # Use a StorageClass that exists on the cluster (many EKS setups only ship gp2 by default).
+  storageClassName: gp2

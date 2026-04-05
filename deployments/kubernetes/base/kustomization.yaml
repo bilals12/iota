@@ -8,12 +8,11 @@ resources:
   - serviceaccount.yaml
   - pvc.yaml
   - deployment.yaml
+  - service.yaml
 
-configMapGenerator:
-  - name: iota-detection-rules
-    files:
-      - ../../rules/aws_cloudtrail/
-
-commonLabels:
-  app.kubernetes.io/managed-by: kustomize
-  app.kubernetes.io/part-of: iota
+# Rules ship in the container image (see Dockerfile COPY rules).
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/managed-by: kustomize
+      app.kubernetes.io/part-of: iota

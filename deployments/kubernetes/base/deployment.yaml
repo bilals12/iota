@@ -91,9 +91,6 @@ spec:
           volumeMounts:
             - name: state
               mountPath: /data
-            - name: rules
-              mountPath: /app/rules
-              readOnly: true
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -104,6 +101,3 @@ spec:
         - name: state
           persistentVolumeClaim:
             claimName: iota-state
-        - name: rules
-          configMap:
-            name: iota-detection-rules

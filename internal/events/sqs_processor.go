@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
+	"github.com/bilals12/iota/internal/metrics"
 )
 
 type SQSProcessor struct {
@@ -77,7 +78,15 @@ func (p *SQSProcessor) Process(ctx context.Context) error {
 	}
 }
 
-func (p *SQSProcessor) processMessage(ctx context.Context, message types.Message) error {
+func (p *SQSProcessor) processMessage(ctx context.Context, message types.Message) (err error) {
+	defer func() {
+		if err == nil {
+			metrics.RecordSQSMessageProcessed("success")
+		} else {
+			metrics.RecordSQSMessageProcessed("failure")
+		}
+	}()
+
 	if message.Body == nil || *message.Body == "" {
 		return fmt.Errorf("empty message body")
 	}
