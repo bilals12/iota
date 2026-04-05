@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/bilals12/iota/compare/v0.4.0...v0.5.0) (2026-04-05)
+
+
+### Features
+
+* updating release workflow ([f20f09c](https://github.com/bilals12/iota/commit/f20f09c4e01184934100fd31fa3615dde5b56935))
+
 ## [0.4.0](https://github.com/bilals12/iota/compare/v0.3.0...v0.4.0) (2026-04-02)
 
 
