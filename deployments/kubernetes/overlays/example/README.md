@@ -4,6 +4,8 @@ Example Kustomize overlay showing how to deploy iota to your EKS cluster with Cl
 
 ## Prerequisites
 
+Detection rules are bundled in the container image at `/app/rules` (see the repo `Dockerfile`). The base deployment uses `--rules=/app/rules/aws_cloudtrail`; you do not need a ConfigMap for rules unless you override with custom files.
+
 1. **ECR Image**: Build and push iota image to your ECR
    ```bash
    aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin YOUR_AWS_ACCOUNT.dkr.ecr.us-east-1.amazonaws.com

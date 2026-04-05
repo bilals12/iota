@@ -95,6 +95,8 @@ iota runs in your aws environment:
 **network**: vpc with egress to alert destinations
 **storage**: local disk for state database and alert deduplication
 
+The official container image includes bundled rules under `/app/rules` (see the `Dockerfile`). You normally point `--rules` at a subdirectory such as `/app/rules/aws_cloudtrail` or `/app/rules/okta` and do **not** mount a ConfigMap for rules.
+
 example eks deployment (cloudtrail mode):
 
 ```yaml
@@ -115,7 +117,7 @@ spec:
             - --sqs-queue-url=$(SQS_QUEUE_URL)
             - --s3-bucket=$(S3_BUCKET)
             - --aws-region=$(AWS_REGION)
-            - --rules=/app/rules
+            - --rules=/app/rules/aws_cloudtrail
             - --state=/data/state.db
           env:
             - name: SQS_QUEUE_URL
@@ -138,16 +140,10 @@ spec:
           volumeMounts:
             - name: state
               mountPath: /data
-            - name: rules
-              mountPath: /app/rules
-              readOnly: true
       volumes:
         - name: state
           persistentVolumeClaim:
             claimName: iota-state
-        - name: rules
-          configMap:
-            name: iota-detection-rules
 ```
 
 example eks deployment (eventbridge mode for okta):
@@ -169,7 +165,7 @@ spec:
             - --mode=eventbridge
             - --sqs-queue-url=$(SQS_QUEUE_URL)
             - --aws-region=$(AWS_REGION)
-            - --rules=/app/rules
+            - --rules=/app/rules/okta
             - --state=/data/state.db
           env:
             - name: SQS_QUEUE_URL
@@ -190,16 +186,10 @@ spec:
           volumeMounts:
             - name: state
               mountPath: /data
-            - name: rules
-              mountPath: /app/rules
-              readOnly: true
       volumes:
         - name: state
           persistentVolumeClaim:
             claimName: iota-state
-        - name: rules
-          configMap:
-            name: iota-detection-rules
 ```
 
 iam policy:
@@ -388,6 +378,12 @@ key components:
 - **deduplication**: sqlite-based alert deduplication
 - **alert forwarder**: routes alerts to configured outputs
 - **health check server**: http endpoints for kubernetes probes
+
+## releases & docker image
+
+version tags (**`v*.*.*`**) trigger **[`.github/workflows/release.yml`](.github/workflows/release.yml)**: linux binaries on the GitHub release, multi-arch **`bilals12/iota`** images on docker hub.
+
+**optional — bump [`iota-deployments`](https://github.com/bilals12/iota-deployments):** add a repository secret **`IOTA_DEPLOYMENTS_TOKEN`** in this repo (fine-grained personal access token: **contents: read and write** on **`bilals12/iota-deployments`**, `main` only if you prefer). after each successful multi-arch manifest step, the workflow commits **`clusters/homelab/kustomization.yaml`** and **`clusters/eks-lab/kustomization.yaml`** with **`newTag:`** set to the release tag so argo (or git pull) tracks the new image. if the secret is unset, the job prints a notice and skips.
 
 ## development
 

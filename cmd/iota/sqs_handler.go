@@ -20,6 +20,7 @@ import (
 	"github.com/bilals12/iota/internal/events"
 	gluecatalog "github.com/bilals12/iota/internal/glue"
 	"github.com/bilals12/iota/internal/logprocessor"
+	"github.com/bilals12/iota/internal/metrics"
 	"github.com/bilals12/iota/internal/state"
 	"github.com/bilals12/iota/internal/telemetry"
 	"github.com/bilals12/iota/pkg/cloudtrail"
@@ -117,6 +118,7 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 
 		if lastKey == key {
 			log.Printf("skipping already processed s3 object: s3://%s/%s", bucket, key)
+			metrics.RecordS3ObjectDownloaded("skipped", 0)
 			op.SetAttributes(attribute.Bool("skipped", true))
 			op.End(nil)
 			return nil
@@ -131,27 +133,40 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 		})
 		downloadSpan.End()
 		if err != nil {
+			metrics.RecordS3ObjectDownloaded("failure", 0)
+			metrics.RecordProcessingError("s3", "get_object")
 			op.End(err)
 			return fmt.Errorf("get object: %w", err)
 		}
 		defer result.Body.Close()
 
+		var downloadedBytes int64
+		if result.ContentLength != nil {
+			downloadedBytes = *result.ContentLength
+		}
+		metrics.RecordS3ObjectDownloaded("success", downloadedBytes)
+
+		procStart := time.Now()
 		processCtx, processSpan := telemetry.StartSpan(ctx, "logprocessor.Process")
 		processedEvents, errs := processor.Process(processCtx, result.Body)
 
 		var batch []*cloudtrail.Event
+		var procEvents []*logprocessor.ProcessedEvent
 		for event := range processedEvents {
 			if dataLakeWriter != nil {
 				if err := dataLakeWriter.WriteEvent(ctx, event); err != nil {
 					log.Printf("error writing to data lake: %v", err)
+					metrics.RecordProcessingError("datalake", "write")
 				}
 			}
 
+			procEvents = append(procEvents, event)
 			batch = append(batch, event.Event)
 		}
 
 		if err := <-errs; err != nil {
 			processSpan.End()
+			metrics.RecordProcessingError("logprocessor", "parse")
 			op.End(err)
 			return fmt.Errorf("process events: %w", err)
 		}
@@ -174,8 +189,18 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 		matches, err := eng.Analyze(analyzeCtx, batch)
 		analyzeSpan.End()
 		if err != nil {
+			metrics.RecordProcessingError("engine", "analyze")
 			op.End(err)
 			return fmt.Errorf("analyze: %w", err)
+		}
+
+		pipelineDur := time.Since(procStart)
+		perEvent := pipelineDur
+		if len(procEvents) > 0 {
+			perEvent = pipelineDur / time.Duration(len(procEvents))
+		}
+		for _, pe := range procEvents {
+			metrics.RecordEventProcessed(pe.LogType, "ok", perEvent)
 		}
 
 		op.SetAttributes(attribute.Int("matches.count", len(matches)))

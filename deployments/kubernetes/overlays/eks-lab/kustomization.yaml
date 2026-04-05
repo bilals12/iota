@@ -1,0 +1,19 @@
+# EKS lab: SQS mode + IRSA + Docker Hub. Account-specific — use a private repo/fork if you do not want IDs on GitHub.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: security
+
+resources:
+  - ../../base
+  - servicemonitor.yaml
+
+patches:
+  - path: serviceaccount.patch.yaml
+  - path: deployment.patch.yaml
+
+images:
+  - name: iota
+    newName: bilals12/iota
+    newTag: v0.4.0
