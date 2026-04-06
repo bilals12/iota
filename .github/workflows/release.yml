@@ -1,18 +1,15 @@
 # -----------------------------------------------------------------------------
-# Release pipeline (one workflow, two phases)
+# Release pipeline
 #
-# Phase A — Version PR (push to main only)
-#   Release Please opens/updates the release PR (changelog + version files).
+# 1) Push to main (non-bot, not [skip release]): compute next semver from
+#    conventional commits (scripts/next-release-version.sh, docs/breaking-changes.md),
+#    push tag v*.*.*. Requires secret RELEASE_PLEASE_TOKEN (PAT) so the tag push
+#    triggers the publish jobs (GITHUB_TOKEN pushes do not trigger workflows).
 #
-# Phase B — Publish (tag v*.*.* or manual dispatch)
-#   Linux CGO binaries → GitHub Release assets
-#   Docker multi-arch → Docker Hub (bilals12/iota)
+# 2) Push tag v*.*.* or workflow_dispatch: build binaries, multi-arch Docker image,
+#    bump iota-deployments, sync .release-please-manifest.json on main.
 #
-# Phase B must run after a version tag exists. Release Please creates that tag when
-# you merge the release PR. Use secret RELEASE_PLEASE_TOKEN (PAT), not GITHUB_TOKEN,
-# so the tag push triggers this workflow (GitHub blocks chained GITHUB_TOKEN events).
-#
-# Manual recovery: Actions → Release pipeline → Run workflow → tag e.g. v0.2.0
+# Local: ./scripts/next-release-version.sh && git tag … && git push origin <tag>
 # -----------------------------------------------------------------------------
 
 name: Release pipeline
@@ -36,30 +33,56 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: release-pipeline-${{ github.workflow }}-${{ github.ref }}
+  group: release-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  # --- Phase A: conventional commits → release PR (no binaries/Docker here) ---
-  release-please:
-    name: Open or update release PR
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  # --- Push to main → next version tag (PAT required) ---
+  tag-next-release:
+    name: Tag next release from main
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      github.actor != 'github-actions[bot]' &&
+      !contains(github.event.head_commit.message, '[skip release]')
     runs-on: ubuntu-latest
     steps:
-      - uses: googleapis/release-please-action@v4
+      - uses: actions/checkout@v4
         with:
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
+          fetch-depth: 0
 
-  # --- Phase B: tag → binaries + Docker Hub + attach binaries to GitHub Release ---
+      - name: Compute next version
+        id: next
+        run: ./scripts/next-release-version.sh --github-out
+
+      - name: Push annotated tag
+        if: steps.next.outputs.should_release == 'true'
+        env:
+          TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          TAG: ${{ steps.next.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TOKEN:-}" ]; then
+            echo "::error::Set RELEASE_PLEASE_TOKEN (PAT with contents: write) so tag pushes trigger publish jobs."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git rev-parse "${TAG}" >/dev/null 2>&1; then
+            echo "::notice::Tag ${TAG} already exists; skipping."
+            exit 0
+          fi
+          git tag -a "${TAG}" -m "Release ${TAG}"
+          git push origin "${TAG}"
+
+  # --- Binaries (parallel with Docker) ---
   build-binary:
     name: Build binary (${{ matrix.suffix }})
     if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
     runs-on: ${{ matrix.runner }}
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
-      # RELEASE_TAG is short (v0.4.1); checkout needs a full ref or it looks for refs/heads/v0.4.1.
       CHECKOUT_REF: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
     strategy:
       fail-fast: false
@@ -92,8 +115,9 @@ jobs:
           name: iota-${{ matrix.suffix }}
           path: iota-${{ matrix.suffix }}
 
-  build-amd64:
-    name: Docker image linux/amd64
+  # --- Single buildx job: linux/amd64 + linux/arm64 (faster than split + manifest) ---
+  docker-publish:
+    name: Docker multi-arch push
     if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     env:
@@ -105,97 +129,41 @@ jobs:
         with:
           ref: ${{ env.CHECKOUT_REF }}
 
-      - name: Build and push AMD64 image
-        id: build-amd64
-        uses: open-turo/actions-docker/build@v1
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
         with:
-          dockerhub-user: ${{ secrets.DOCKERHUB_USERNAME }}
-          dockerhub-password: ${{ secrets.DOCKERHUB_PASSWORD }}
-          image-platform: linux/amd64
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: bilals12/iota
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
           push: true
-          metadata-tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
 
-    outputs:
-      digest: ${{ steps.build-amd64.outputs.digest }}
-      image-name: ${{ steps.build-amd64.outputs.image-name }}
-
-  build-arm64:
-    name: Docker image linux/arm64
-    if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
-    runs-on: ubuntu-latest
-    env:
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
-      CHECKOUT_REF: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.CHECKOUT_REF }}
-
-      - name: Build and push ARM64 image
-        id: build-arm64
-        uses: open-turo/actions-docker/build@v1
-        with:
-          dockerhub-user: ${{ secrets.DOCKERHUB_USERNAME }}
-          dockerhub-password: ${{ secrets.DOCKERHUB_PASSWORD }}
-          image-platform: linux/arm64
-          install-qemu: true
-          push: true
-          metadata-tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest
-
-    outputs:
-      digest: ${{ steps.build-arm64.outputs.digest }}
-      image-name: ${{ steps.build-arm64.outputs.image-name }}
-
-  create-manifest:
-    name: Docker multi-arch manifest
-    if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
-    runs-on: ubuntu-latest
-    needs: [build-amd64, build-arm64]
-    env:
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
-      CHECKOUT_REF: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.CHECKOUT_REF }}
-
-      - name: Create multi-arch manifest
-        id: manifest
-        uses: open-turo/actions-docker/manifest@v1
-        with:
-          image-name: bilals12/iota
-          dockerhub-user: ${{ secrets.DOCKERHUB_USERNAME }}
-          dockerhub-password: ${{ secrets.DOCKERHUB_PASSWORD }}
-          metadata-tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest
-          sources: |
-            bilals12/iota@${{ needs.build-amd64.outputs.digest }}
-            bilals12/iota@${{ needs.build-arm64.outputs.digest }}
-
-  # After the multi-arch manifest is on Docker Hub, bump Kustomize `newTag` in iota-deployments
-  # (requires secret IOTA_DEPLOYMENTS_TOKEN — fine-grained PAT: contents write on bilals12/iota-deployments).
   bump-iota-deployments:
     name: Bump image tag in iota-deployments
-    needs: [create-manifest]
+    needs: [docker-publish]
     if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
     steps:
-      # secrets are not allowed in step `if:` (actionlint); gate checkout/push with a prior step output.
       - name: Decide whether to bump iota-deployments
         id: bump
         env:
@@ -230,7 +198,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add clusters/homelab/kustomization.yaml clusters/eks-lab/kustomization.yaml
-          git commit -m "chore: bump iota image to ${RELEASE_TAG}"
+          git commit -m "ops: bump iota image to ${RELEASE_TAG}"
           git push origin main
 
   attach-binaries:
@@ -255,7 +223,6 @@ jobs:
       - name: Upload to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # This job has no checkout; gh otherwise infers repo from git and fails.
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -272,3 +239,53 @@ jobs:
               --generate-notes \
               --title "$TAG"
           fi
+
+  # Keep manifest on main aligned with the latest tag (bot push; tag job ignores bot actor)
+  sync-manifest:
+    name: Sync version manifest on main
+    needs: [docker-publish]
+    if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+    steps:
+      - name: Skip if no PAT
+        id: tok
+        env:
+          TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+        run: |
+          if [ -z "${TOKEN:-}" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::RELEASE_PLEASE_TOKEN unset; skipping manifest sync."
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.tok.outputs.run == 'true'
+        with:
+          ref: main
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          fetch-depth: 0
+
+      - name: Update .release-please-manifest.json
+        if: steps.tok.outputs.run == 'true'
+        env:
+          TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          VERSION_STRIP: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          V="${VERSION_STRIP#v}"
+          jq --arg v "$V" '.["."] = $v' .release-please-manifest.json > .release-please-manifest.json.tmp
+          mv .release-please-manifest.json.tmp .release-please-manifest.json
+          git diff --stat
+          if git diff --quiet; then
+            echo "Manifest already at ${V}"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .release-please-manifest.json
+          git commit -m "build: sync manifest to ${V} [skip release]"
+          git remote set-url origin "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push origin main

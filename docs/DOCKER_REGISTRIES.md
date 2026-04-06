@@ -16,10 +16,7 @@ The CI/CD workflows use Turo's open-source Docker actions (`open-turo/actions-do
 **Detailed setup instructions:** See `docs/DOCKERHUB_SETUP.md`
 
 **2. Automatic Push on Release:**
-When you create a version tag (e.g., `v1.0.0`), the `release.yml` workflow will automatically:
-- Build AMD64 and ARM64 images separately on native runners
-- Create a multi-arch manifest combining both platforms
-- Push to Docker Hub
+When a version tag exists (e.g. from a push to `main` or a manual `git push origin v1.0.0`), `release.yml` builds **one** multi-arch image (`linux/amd64` + `linux/arm64` via buildx) and pushes to Docker Hub.
 
 **3. Manual Push:**
 ```bash
@@ -33,15 +30,10 @@ make docker-push-dockerhub DOCKERHUB_USERNAME=yourusername IMAGE_TAG=v1.0.0
 ## Workflows
 
 ### `release.yml` (Automatic)
-- **Triggers**: Version tags (`v*.*.*`)
-- **Uses**: Turo's `open-turo/actions-docker/build` and `open-turo/actions-docker/manifest` actions
-- **Process**:
-  1. Builds AMD64 and ARM64 images separately (parallel jobs)
-  2. Creates multi-arch manifest from digests
-  3. Pushes to Docker Hub
-- **Requires**: `DOCKERHUB_USERNAME` and `DOCKERHUB_PASSWORD` secrets
-- **Tags**: `v1.0.0`, `1.0`, `1`, `latest`
-- **Security**: Optional Trivy vulnerability scanning (free, open-source)
+- **Triggers**: Pushes to `main` (may create the next `v*.*.*` tag via `scripts/next-release-version.sh`), version tags (`v*.*.*`), or manual `workflow_dispatch`
+- **Uses**: `docker/build-push-action` with **buildx** — one job builds **`linux/amd64`** and **`linux/arm64`** and pushes a multi-arch manifest to Docker Hub
+- **Requires**: `DOCKERHUB_USERNAME` and `DOCKERHUB_PASSWORD` secrets; `RELEASE_PLEASE_TOKEN` when tagging from CI (see [`CHANGELOG.md`](../CHANGELOG.md) “How releases work”)
+- **Tags**: `v1.0.0`, `1.0`, `1`, `latest` (via `docker/metadata-action` semver patterns)
 
 ### `dockerhub.yml` (Docker Hub Only)
 - **Triggers**: Version tags or manual `workflow_dispatch`

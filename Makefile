@@ -1,4 +1,4 @@
-.PHONY: build test smoke ci-local clean docker-build docker-push helm-package terraform-init
+.PHONY: build test smoke ci-local clean docker-build docker-push helm-package terraform-init release-version release-help
 
 # Build the detection engine
 build:
@@ -130,3 +130,15 @@ validate: fmt lint test
 # Everything CI exercises locally: validate + smoke
 ci-local: validate smoke
 	@echo "✓ ci-local passed"
+
+# Next release tag from conventional commits (see docs/breaking-changes.md)
+release-version:
+	@./scripts/next-release-version.sh
+
+release-help:
+	@echo "Release flow:"
+	@echo "  1) make release-version   — show next semver and tag from commits since the latest v*.*.* tag"
+	@echo "  2) git tag -a <tag> -m \"Release <tag>\" && git push origin <tag>"
+	@echo "     (use RELEASE_PLEASE_TOKEN / a PAT if your remote blocks workflow triggers)"
+	@echo "  3) CI: push to main — same version logic runs in .github/workflows/release.yml"
+	@echo "  Argo CD: after the tag is pushed, iota-deployments can be bumped by the workflow (IOTA_DEPLOYMENTS_TOKEN)."
