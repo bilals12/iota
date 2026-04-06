@@ -1,0 +1,30 @@
+# Manual check that an org (or repo) self-hosted runner is online and labeled correctly.
+# Actions → Self-hosted runner smoke → Run workflow.
+# Expected runner labels: self-hosted, beelink (see scripts/install-github-actions-runner.sh).
+#
+# Switching CI jobs to self-hosted comes after this workflow is green.
+
+name: Self-hosted runner smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify runner
+    runs-on: [self-hosted, beelink]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Host and runner
+        run: |
+          uname -a
+          echo "RUNNER_NAME=$RUNNER_NAME"
+          echo "RUNNER_OS=$RUNNER_OS"
+
+      - name: Toolchain probe (optional during bring-up)
+        run: |
+          command -v go >/dev/null 2>&1 && go version || echo "go: not installed yet (OK for first boot)"
