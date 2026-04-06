@@ -86,14 +86,13 @@ repos:
     hooks:
       - id: hadolint
 
-  # Official golangci-lint hook
+  # Official golangci-lint hook (GOPATH via entry — hook manifest does not allow `env:`)
   - repo: https://github.com/golangci/golangci-lint
     rev: v1.62.2
     hooks:
       - id: golangci-lint
         fail_fast: true
-        env:
-          GOPATH: /tmp/iota-precommit-gopath
+        entry: env GOPATH=/tmp/iota-precommit-gopath golangci-lint run --new-from-rev HEAD --fix
 
   # Terraform/HCL-specific hooks
   - repo: https://github.com/antonbabenko/pre-commit-terraform

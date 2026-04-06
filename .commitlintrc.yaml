@@ -1,2 +1,20 @@
 extends:
   - "@open-turo/commitlint-config-conventional"
+
+# Align with docs/breaking-changes.md (ops: IaC, CI/CD, deployment, etc.)
+rules:
+  type-enum:
+    - 2
+    - always
+    - - build
+      - chore
+      - ci
+      - docs
+      - feat
+      - fix
+      - perf
+      - refactor
+      - revert
+      - style
+      - test
+      - ops

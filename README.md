@@ -381,9 +381,9 @@ key components:
 
 ## releases & docker image
 
-version tags (**`v*.*.*`**) trigger **[`.github/workflows/release.yml`](.github/workflows/release.yml)**: linux binaries on the GitHub release, multi-arch **`bilals12/iota`** images on docker hub.
+Pushes to **`main`** can create the next **`v*.*.*`** tag automatically (see [`docs/breaking-changes.md`](docs/breaking-changes.md)). That tag triggers **[`.github/workflows/release.yml`](.github/workflows/release.yml)**: linux binaries on the GitHub release, one multi-arch **`bilals12/iota`** build on Docker Hub, and a manifest sync on `main`. Locally, run `./scripts/next-release-version.sh`, then `git tag` / `git push origin <tag>` (see **`make release-help`**).
 
-**optional — bump [`iota-deployments`](https://github.com/bilals12/iota-deployments):** add a repository secret **`IOTA_DEPLOYMENTS_TOKEN`** in this repo (fine-grained personal access token: **contents: read and write** on **`bilals12/iota-deployments`**, `main` only if you prefer). after each successful multi-arch manifest step, the workflow commits **`clusters/homelab/kustomization.yaml`** and **`clusters/eks-lab/kustomization.yaml`** with **`newTag:`** set to the release tag so argo (or git pull) tracks the new image. if the secret is unset, the job prints a notice and skips.
+**Secrets:** **`RELEASE_PLEASE_TOKEN`** (PAT, **contents: write**) so tag pushes trigger publish jobs. **optional — bump [`iota-deployments`](https://github.com/bilals12/iota-deployments):** add **`IOTA_DEPLOYMENTS_TOKEN`** (fine-grained PAT: **contents: read and write** on **`bilals12/iota-deployments`**). The workflow updates **`clusters/homelab/kustomization.yaml`** and **`clusters/eks-lab/kustomization.yaml`** **`newTag:`** to match the release so Argo CD can reconcile. If unset, the job skips with a notice.
 
 ## development
 
