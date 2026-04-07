@@ -6,7 +6,7 @@
 #    push tag v*.*.*. Requires secret RELEASE_PLEASE_TOKEN (PAT) so the tag push
 #    triggers the publish jobs (GITHUB_TOKEN pushes do not trigger workflows).
 #
-# 2) Push tag v*.*.* or workflow_dispatch: build binaries, multi-arch Docker image,
+# 2) Push tag v*.*.* or workflow_dispatch: build binaries, Docker image (linux/amd64),
 #    bump iota-deployments, sync .release-please-manifest.json on main.
 #
 # Local: ./scripts/next-release-version.sh && git tag … && git push origin <tag>
@@ -114,9 +114,10 @@ jobs:
           name: iota-${{ matrix.suffix }}
           path: iota-${{ matrix.suffix }}
 
-  # --- Single buildx job: linux/amd64 + linux/arm64 (faster than split + manifest) ---
+  # --- linux/amd64 only: avoids QEMU arm64 builds on the self-hosted x64 runner (heavy CPU).
+  #    Release binaries for arm64 remain in build-binary (native ubuntu-24.04-arm) if needed.
   docker-publish:
-    name: Docker multi-arch push
+    name: Docker push (linux/amd64)
     if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
     runs-on: [self-hosted, beelink]
     env:
@@ -127,8 +128,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.CHECKOUT_REF }}
-
-      - uses: docker/setup-qemu-action@v3
 
       - uses: docker/setup-buildx-action@v3
 
@@ -150,7 +149,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
