@@ -4,7 +4,6 @@ import json
 import sys
 import importlib.util
 from pathlib import Path
-from collections import defaultdict
 from typing import Dict, List, Any
 
 
@@ -75,16 +74,12 @@ class Engine:
                 continue
         return rules
 
-    def analyze(self, events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def analyze(self, events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         matches = []
-        counts: Dict[str, Dict[str, int]] = defaultdict(
-            lambda: {"match": 0, "no_match": 0}
-        )
         for event in events:
             rule_event = self._unwrap_event(event)
             for rule in self.rules:
                 if rule.matches(rule_event):
-                    counts[rule.rule_id]["match"] += 1
                     matches.append(
                         {
                             "rule_id": rule.rule_id,
@@ -94,17 +89,7 @@ class Engine:
                             "event": event,
                         }
                     )
-                else:
-                    counts[rule.rule_id]["no_match"] += 1
-        rule_evaluations = [
-            {
-                "rule_id": rid,
-                "match": c["match"],
-                "no_match": c["no_match"],
-            }
-            for rid, c in sorted(counts.items())
-        ]
-        return {"matches": matches, "rule_evaluations": rule_evaluations}
+        return matches
 
     def _unwrap_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
         event_source = event.get("eventSource", "")
@@ -123,7 +108,9 @@ def main():
     events = request.get("events", [])
 
     engine = Engine(rules_dir)
-    response = engine.analyze(events)
+    matches = engine.analyze(events)
+
+    response = {"matches": matches}
     json.dump(response, sys.stdout)
 
 
