@@ -61,7 +61,7 @@ Under pressure, use **`alerts list`** for triage; use **`query`** for hunting. *
 **Data lake (so `iota query` has JSON to scan)**
 
 1. Set **`DATA_LAKE_BUCKET`** in **`iota-deployments`** (same bucket as CloudTrail delivery is OK: iota writes under **`logs/<slug>/year=…/hour=…/*.json.gz`**, separate from AWS’s trail object layout). The Deployment passes **`--data-lake-bucket=$(DATA_LAKE_BUCKET)`**; when empty, the writer is off and the lake has nothing to query.
-2. **IAM:** the identity in **`iota-aws`** (homelab) or IRSA role (EKS) needs **`s3:PutObject`** (and related) on that bucket. If writes fail, check pod logs and **`iota_processing_errors_total{component="datalake"}`** on **`/metrics`**.
+2. **IAM:** the identity in **`iota-aws-prod`** / **`iota-aws-test`** (homelab) or IRSA role (EKS) needs **`s3:PutObject`** (and related) on that bucket. If writes fail, check pod logs and **`iota_processing_errors_total{component="datalake"}`** on **`/metrics`**.
 3. **`iota query`** defaults **`--s3-bucket`** from env, first match: **`IOTA_S3_BUCKET`**, **`IOTA_DATA_LAKE_BUCKET`**, **`DATA_LAKE_BUCKET`**. Inside the pod, with **`DATA_LAKE_BUCKET`** set, you can run **`kubectl exec … -- /app/iota query …`** without repeating the bucket name.
 4. Lake rows are **normalized CloudTrail-shaped JSON** (see **`pkg/cloudtrail.Event`**): top-level fields such as **`eventName`**, **`eventSource`**, **`sourceIPAddress`**, **`awsRegion`**, **`recipientAccountId`**, plus nested **`userIdentity`**. DuckDB exposes columns from **`read_ndjson`**; filter on top-level fields first, then use **`json()`** / **`->>`** if you need nested paths. Example:
 
@@ -73,7 +73,7 @@ Under pressure, use **`alerts list`** for triage; use **`query`** for hunting. *
          LIMIT 50"
 ```
 
-Use **`--start`** / **`--end`** (RFC3339) for an alert’s **`created`–`updated`** window. For Athena instead of DuckDB, set **`IOTA_ATHENA_*`** env vars and **`--force-athena`** when wired.
+Use **`--start`** / **`--end`** (RFC3339) for an alert’s **`created`–`updated`** window; **`--end` is exclusive**, so **`--start=…T19:00:00Z --end=…T20:00:00Z`** scans only the **hour=19** partition (UTC). For Athena instead of DuckDB, set **`IOTA_ATHENA_*`** env vars and **`--force-athena`** when wired.
 
 Use **[docs/detection-pipeline-checklist.md](detection-pipeline-checklist.md)** § Observability for a short checklist.
 
@@ -81,11 +81,11 @@ Use **[docs/detection-pipeline-checklist.md](detection-pipeline-checklist.md)** 
 
 ## 4. Kubernetes and GitOps (`iota-deployments`)
 
-The **`iota`** repo ships **base manifests** under **`deployments/kubernetes/base`**. Day-to-day cluster-specific values (image tag, queue URL, bucket, region, optional data lake) live in the separate **`iota-deployments`** repo (overlays such as **`clusters/homelab`**, **`clusters/eks-lab`**).
+The **`iota`** repo ships **base manifests** under **`deployments/kubernetes/base`**. Day-to-day cluster-specific values (image tag, queue URL, bucket, region, optional data lake) live in the separate **`iota-deployments`** repo (overlays such as **`clusters/homelab-prod`**, **`clusters/homelab-test`**, **`clusters/eks-lab`**). **homelab-test** uses ad-hoc image tags (default **`dev`**), not release **`v*.*.*`** bumps — see **`iota-deployments/docs/homelab-k3s.md`** (Test: ad-hoc dev images).
 
 **Homelab (k3s on Beelink, Tailscale):**
 
-- **`iota-deployments/docs/homelab-k3s.md`** — kubeconfig over Tailscale, **`tls-san`**, **`iota-aws`** secret, Argo CD, **kube-prometheus-stack**, and **HTTP Ingress** for Grafana + Argo CD (**`manifests/tailnet-ingress/`**, **`homelab-tailnet-ingress`** Application).
+- **`iota-deployments/docs/homelab-k3s.md`** — kubeconfig over Tailscale, **`tls-san`**, **`iota-aws-prod`** / **`iota-aws-test`**, Argo CD, **kube-prometheus-stack**, and **HTTP Ingress** for Grafana + Argo CD (**`manifests/tailnet-ingress/`**, **`homelab-tailnet-ingress`** Application).
 - **Important:** Multi-source Argo apps (e.g. **kube-prometheus-stack**) pull Helm **values from Git**; if something is only in a local clone, **push to the remote `main`** (or whatever **`targetRevision`**) before expecting the cluster to match.
 
 **Release automation:** Pushes that create **`v*.*.*`** tags can bump image tags in **`iota-deployments`** via **`IOTA_DEPLOYMENTS_TOKEN`** (see root **README** § releases & docker image).
