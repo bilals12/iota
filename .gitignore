@@ -13,6 +13,10 @@ coverage.txt
 go.work
 go.work.sum
 
+# Local Go build caches (optional; used by smoke scripts when default cache is broken)
+.gocache/
+.gomodcache/
+
 # IDE
 .idea/
 .vscode/
