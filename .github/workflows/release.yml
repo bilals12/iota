@@ -50,14 +50,6 @@ jobs:
       !contains(github.event.head_commit.message, '[skip release]')
     runs-on: [self-hosted, beelink]
     steps:
-      - name: Unstick workspace before checkout (self-hosted)
-        if: runner.environment == 'self-hosted'
-        run: |
-          set -euo pipefail
-          if [[ -z "${GITHUB_WORKSPACE:-}" || ! -d "${GITHUB_WORKSPACE}" ]]; then exit 0; fi
-          sudo rm -rf "${GITHUB_WORKSPACE}/.gomodcache" "${GITHUB_WORKSPACE}/.gocache" || true
-          sudo chown -R "$(id -u):$(id -g)" "${GITHUB_WORKSPACE}" || true
-
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -136,14 +128,6 @@ jobs:
       CHECKOUT_REF: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
 
     steps:
-      - name: Unstick workspace before checkout (self-hosted)
-        if: runner.environment == 'self-hosted'
-        run: |
-          set -euo pipefail
-          if [[ -z "${GITHUB_WORKSPACE:-}" || ! -d "${GITHUB_WORKSPACE}" ]]; then exit 0; fi
-          sudo rm -rf "${GITHUB_WORKSPACE}/.gomodcache" "${GITHUB_WORKSPACE}/.gocache" || true
-          sudo chown -R "$(id -u):$(id -g)" "${GITHUB_WORKSPACE}" || true
-
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.CHECKOUT_REF }}
@@ -203,14 +187,6 @@ jobs:
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
     steps:
-      - name: Unstick workspace before checkout (self-hosted)
-        if: runner.environment == 'self-hosted'
-        run: |
-          set -euo pipefail
-          if [[ -z "${GITHUB_WORKSPACE:-}" || ! -d "${GITHUB_WORKSPACE}" ]]; then exit 0; fi
-          sudo rm -rf "${GITHUB_WORKSPACE}/.gomodcache" "${GITHUB_WORKSPACE}/.gocache" || true
-          sudo chown -R "$(id -u):$(id -g)" "${GITHUB_WORKSPACE}" || true
-
       - name: Decide whether to bump iota-deployments
         id: bump
         env:
@@ -330,14 +306,6 @@ jobs:
           else
             echo "run=true" >> "$GITHUB_OUTPUT"
           fi
-
-      - name: Unstick workspace before checkout (self-hosted)
-        if: steps.tok.outputs.run == 'true' && runner.environment == 'self-hosted'
-        run: |
-          set -euo pipefail
-          if [[ -z "${GITHUB_WORKSPACE:-}" || ! -d "${GITHUB_WORKSPACE}" ]]; then exit 0; fi
-          sudo rm -rf "${GITHUB_WORKSPACE}/.gomodcache" "${GITHUB_WORKSPACE}/.gocache" || true
-          sudo chown -R "$(id -u):$(id -g)" "${GITHUB_WORKSPACE}" || true
 
       - uses: actions/checkout@v4
         if: steps.tok.outputs.run == 'true'

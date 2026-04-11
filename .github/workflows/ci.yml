@@ -13,16 +13,11 @@ jobs:
   test:
     name: Test
     runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON('["self-hosted","beelink"]') }}
+    env:
+      # Outside $GITHUB_WORKSPACE so actions/checkout can wipe the clone; smoke.sh defaults would use repo-local caches.
+      GOMODCACHE: ${{ github.workspace }}/../.gomodcache
+      GOCACHE: ${{ github.workspace }}/../.gocache
     steps:
-      # Root-owned .gomodcache/.gocache (e.g. CodeQL or Docker) blocks checkout from wiping the workspace.
-      - name: Unstick workspace before checkout (self-hosted)
-        if: runner.environment == 'self-hosted'
-        run: |
-          set -euo pipefail
-          if [[ -z "${GITHUB_WORKSPACE:-}" || ! -d "${GITHUB_WORKSPACE}" ]]; then exit 0; fi
-          sudo rm -rf "${GITHUB_WORKSPACE}/.gomodcache" "${GITHUB_WORKSPACE}/.gocache" || true
-          sudo chown -R "$(id -u):$(id -g)" "${GITHUB_WORKSPACE}" || true
-
       - uses: actions/checkout@v4
 
       - name: Set up Go
@@ -33,7 +28,7 @@ jobs:
       - name: Cache Go modules
         uses: actions/cache@v4
         with:
-          path: ~/go/pkg/mod
+          path: ${{ github.workspace }}/../.gomodcache
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
@@ -67,15 +62,10 @@ jobs:
     name: Build
     runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON('["self-hosted","beelink"]') }}
     needs: test
+    env:
+      GOMODCACHE: ${{ github.workspace }}/../.gomodcache
+      GOCACHE: ${{ github.workspace }}/../.gocache
     steps:
-      - name: Unstick workspace before checkout (self-hosted)
-        if: runner.environment == 'self-hosted'
-        run: |
-          set -euo pipefail
-          if [[ -z "${GITHUB_WORKSPACE:-}" || ! -d "${GITHUB_WORKSPACE}" ]]; then exit 0; fi
-          sudo rm -rf "${GITHUB_WORKSPACE}/.gomodcache" "${GITHUB_WORKSPACE}/.gocache" || true
-          sudo chown -R "$(id -u):$(id -g)" "${GITHUB_WORKSPACE}" || true
-
       - uses: actions/checkout@v4
 
       - name: Set up Go
@@ -102,15 +92,10 @@ jobs:
     name: Docker Build
     runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON('["self-hosted","beelink"]') }}
     needs: test
+    env:
+      GOMODCACHE: ${{ github.workspace }}/../.gomodcache
+      GOCACHE: ${{ github.workspace }}/../.gocache
     steps:
-      - name: Unstick workspace before checkout (self-hosted)
-        if: runner.environment == 'self-hosted'
-        run: |
-          set -euo pipefail
-          if [[ -z "${GITHUB_WORKSPACE:-}" || ! -d "${GITHUB_WORKSPACE}" ]]; then exit 0; fi
-          sudo rm -rf "${GITHUB_WORKSPACE}/.gomodcache" "${GITHUB_WORKSPACE}/.gocache" || true
-          sudo chown -R "$(id -u):$(id -g)" "${GITHUB_WORKSPACE}" || true
-
       - uses: actions/checkout@v4
 
       # Avoid failed pulls of moby/buildkit when ~/.docker has bad docker.io credentials.
