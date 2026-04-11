@@ -1,6 +1,6 @@
 # OpenSpec Instructions (Turo Workflow)
 
-Instructions for AI coding assistants using OpenSpec with iota.
+Instructions for AI coding assistants using OpenSpec with iota. Repo-wide entry points: **[CLAUDE.md](../CLAUDE.md)** and **[docs/DEVELOPMENT.md](../docs/DEVELOPMENT.md)**.
 
 ## TL;DR Quick Checklist
 
