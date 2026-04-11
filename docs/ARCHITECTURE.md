@@ -1,5 +1,7 @@
 # iota Architecture
 
+> **Contributors:** Start with **[CLAUDE.md](../CLAUDE.md)** and **[DEVELOPMENT.md](DEVELOPMENT.md)** for workflow, OpenSpec, testing, and how **iota**, **iota-deployments**, and **iota-infra** fit together. This document is the **system design reference** (diagrams and component detail).
+
 ## Overview
 
 iota is a self-hosted security detection engine with enterprise-grade architecture. It runs entirely within your AWS account, consuming CloudTrail, Okta, Google Workspace, and 1Password logs. All detection logic runs locally. No data leaves your control boundary.

@@ -10,6 +10,8 @@
 
 runs entirely within your aws account. consumes cloudtrail, okta, google workspace, and 1password logs. applies detection logic locally, emits alerts to your existing tooling. no telemetry exfiltration.
 
+**contributing:** **[CLAUDE.md](CLAUDE.md)** (index for humans and coding agents) · **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** (openspec, branches/prs, testing, parsers/rules)
+
 </div>
 
 ## why iota?
@@ -64,21 +66,18 @@ okta/1password/sailpoint → eventbridge partner bus → sqs queue → iota proc
 
 ### prerequisites
 
-- go 1.24+
+- go 1.25+
 - python 3.11+
-- aws credentials with cloudtrail s3 read access
+- aws credentials with cloudtrail s3 read access (for live ingestion modes)
 
 ### installation
 
 ```bash
-# clone repo
-git clone https://github.com/bilals12/iota.git
+git clone https://github.com/iota-corp/iota.git
 cd iota
 
-# build
 go build -o bin/iota ./cmd/iota
 
-# test with sample data
 ./bin/iota \
   --jsonl testdata/events/root-login.jsonl \
   --rules rules/aws_cloudtrail \
@@ -86,16 +85,21 @@ go build -o bin/iota ./cmd/iota
   --engine engines/iota/engine.py
 ```
 
+### related repositories
+
+| repo                                                                  | role                                                                |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| **[iota](https://github.com/iota-corp/iota)** (this repo)             | application, rules, `Dockerfile`, CI, `deployments/kubernetes/base` |
+| **[iota-deployments](https://github.com/iota-corp/iota-deployments)** | kustomize overlays per cluster, image tags, argo cd apps            |
+| **[iota-infra](https://github.com/iota-corp/iota-infra)**             | terraform: iam, eks, queues, etc. (environment-specific)            |
+
 ### deployment
 
-iota runs in your aws environment:
+production manifests and per-cluster settings live in **iota-deployments** (kustomize overlays, secrets, queue urls). base kubernetes yaml is maintained in this repo under **`deployments/kubernetes/base`** and vendored/synced there—see **iota-deployments** `README.md`.
 
-**compute**: eks, ecs, fargate, or ec2
-**permissions**: s3 read access to cloudtrail bucket, sqs receive/delete messages
-**network**: vpc with egress to alert destinations
-**storage**: local disk for state database and alert deduplication
+**compute:** eks, k3s, ecs, fargate, or ec2 · **permissions:** s3 read for cloudtrail (sqs mode), sqs receive/delete · **storage:** persistent disk for sqlite state/dedup
 
-The official container image includes bundled rules under `/app/rules` (see the `Dockerfile`). You normally point `--rules` at a subdirectory such as `/app/rules/aws_cloudtrail` or `/app/rules/okta` and do **not** mount a ConfigMap for rules.
+the official container image includes bundled rules under `/app/rules` (see the `dockerfile`). point `--rules` at a subdirectory such as `/app/rules/aws_cloudtrail` or `/app/rules/okta`; you normally do **not** mount a configmap for rules.
 
 example eks deployment (cloudtrail mode):
 
@@ -387,17 +391,16 @@ Pushes to **`main`** can create the next **`v*.*.*`** tag automatically (see [`d
 
 ## development
 
-see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for development setup.
+- **[CLAUDE.md](CLAUDE.md)** — doc index and minimum commands for coding agents
+- **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** — OpenSpec workflow, branch/pr conventions, TDD, repo map, GitOps
+- **[TESTING.md](TESTING.md)** — fixtures, integration tests, smoke, attack-sim
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — detailed architecture
 
 ```bash
-# run tests
+export CGO_ENABLED=1
 go test ./...
-
-# build
-go build -o bin/iota ./cmd/iota
-
-# add integration test
-go test ./internal/reader -run TestReaderWithRealCloudTrail -v
+./scripts/smoke.sh
+# or: make ci-local
 ```
 
 ## security considerations

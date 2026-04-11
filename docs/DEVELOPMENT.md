@@ -1,6 +1,6 @@
 # iota — developer guide
 
-This document is the **handbook for ongoing work** on iota: how the detection pipeline fits together, what to tune, how deployments and the homelab GitOps repo relate to this codebase, and where deeper docs live.
+This document is the **handbook for ongoing work** on iota: how to plan changes (OpenSpec), how to branch and test, how the detection pipeline fits together, and where deployments and infra repos fit. **Coding agents** should start with **[CLAUDE.md](../CLAUDE.md)** for a short reading list.
 
 ---
 
@@ -12,16 +12,111 @@ This document is the **handbook for ongoing work** on iota: how the detection pi
 | **`internal/events`** | SQS / EventBridge processors, S3 notification handling. |
 | **`internal/logprocessor`** | Adaptive classifier, parsers (CloudTrail, Okta, etc.), core **`Process(io.Reader)`** path. |
 | **`internal/engine`** | Python rules engine subprocess (`--python`, `--engine`, `--rules`). |
-| **`pkg/cloudtrail`** | CloudTrail event types and parsing helpers. |
+| **`pkg/cloudtrail`** | Shared event shape and parsing helpers (many log types normalize into this model). |
 | **`rules/`** | Detection rules (Python + metadata); image copies under **`/app/rules`** (see `Dockerfile`). |
-| **`deployments/kubernetes`** | Base Deployment: `--mode=sqs`, **`--rules=/app/rules/aws_cloudtrail`**, engine path, env placeholders. |
+| **`deployments/kubernetes`** | Base Deployment manifest; cluster overlays live in **iota-deployments**. |
 | **`scripts/attack-sim/`** | End-to-end-ish simulation against real AWS + Prometheus counters. |
+| **`openspec/`** | Structured specs and change proposals (see §2). |
 
-**Architecture narrative:** [docs/ARCHITECTURE.md](ARCHITECTURE.md) · **Breaking changes / releases:** [docs/breaking-changes.md](breaking-changes.md) · **Troubleshooting:** [docs/TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+**Architecture narrative:** [ARCHITECTURE.md](ARCHITECTURE.md) · **Breaking changes / releases:** [breaking-changes.md](breaking-changes.md) · **Troubleshooting:** [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ---
 
-## 2. Detection pipeline (CloudTrail / S3 → SQS)
+## 2. Planning and design (OpenSpec)
+
+Structured proposals and **current specs** live under **`openspec/`**. Full workflow for agents and humans: **[openspec/AGENTS.md](../openspec/AGENTS.md)**. Project context (log types, stack): **[openspec/project.md](../openspec/project.md)**.
+
+**When to open a change**
+
+- New capabilities, breaking API/schema changes, architecture shifts, performance work that changes behavior, bulk rule additions.
+- **Skip** a formal proposal for: bug fixes restoring intended behavior, typos/formatting, non-breaking dependency bumps, single-rule tweaks, tests only.
+
+**Typical flow**
+
+1. Search existing work: browse **`openspec/changes/`** and **`openspec/specs/`**, or use your OpenSpec CLI if configured (`openspec list`, `openspec list --specs`).
+2. Pick a unique **change id** (kebab-case, verb-led: `add-`, `update-`, `refactor-`).
+3. Add **`openspec/changes/<id>/proposal.md`**, **`tasks.md`**, and **`design.md`** only when tradeoffs need recording.
+4. Edit **canonical specs** in **`openspec/specs/<capability>/spec.md`** (this repo uses the Turo-style workflow: specs are truth on the branch, not only deltas in the change folder).
+5. For review, generate or maintain **`spec-diff/`** under the change when your process requires it (see `AGENTS.md`).
+6. Get approval before large implementations; implement **`tasks.md`** in order and check items off when done.
+
+Capabilities today include **`log-processing`**, **`detection-engine`**, **`alerting`**, **`deployment`**, **`historical-queries`**, **`transforms`**, etc. Add a new capability folder if you introduce a major new surface area.
+
+---
+
+## 3. Branches, PRs, and merging
+
+- **Default integration branches:** **`main`** and **`develop`** (CI runs on both; see `.github/workflows/ci.yml`). Use **conventional commits** (`feat:`, `fix:`, `docs:`, `chore:`) so release tooling and release notes stay coherent (see [breaking-changes.md](breaking-changes.md)).
+- **Branch naming:** `feature/<topic>`, `fix/<topic>`, or include the OpenSpec change id when applicable (`feature/add-azure-audit-parser`).
+- **Pull requests:** Prefer **small, reviewable PRs** with a clear description linking an OpenSpec change when one exists. Rebase or merge from **`develop`** / **`main`** as your team agrees; avoid force-pushing shared branches; use `--force-with-lease` only on your feature branch if you must rewrite history.
+- **Before merge:** `go test ./...` and **`./scripts/smoke.sh`** (or **`make ci-local`**) locally; CI must be green. Fork PRs run on GitHub-hosted runners; same-repo PRs use the org’s self-hosted labels—see [TROUBLESHOOTING.md](TROUBLESHOOTING.md) if CI env differs.
+- **Docs and breaking changes:** Anything that affects operators or detection contracts should be reflected in **`docs/breaking-changes.md`** or the relevant spec when applicable.
+
+---
+
+## 4. Local development and test-driven workflow
+
+**Toolchain:** Go **1.25+**, Python **3.11+**, **CGO** enabled (SQLite / DuckDB). On macOS, install Xcode Command Line Tools so `gcc`/`clang` is available.
+
+**Unit and integration tests**
+
+```bash
+export CGO_ENABLED=1
+go test ./...
+```
+
+**TDD pattern for parsers and processors**
+
+- Put **table-driven tests** next to code: e.g. `internal/logprocessor/parsers/*_test.go`, `internal/logprocessor/processor_*_fixtures_test.go` with golden JSONL under **`testdata/`**.
+- Extend **fixtures** when you add a log shape; keep samples **minimal and sanitized** (no live secrets).
+- Run targeted tests: `go test ./internal/logprocessor/parsers/ -run TestSomething -v`.
+
+**Smoke test (full parse + Python rules on a fixture)**
+
+```bash
+make smoke
+# or: ./scripts/smoke.sh
+# or: SMOKE_JSONL=path/to/file.jsonl ./scripts/smoke.sh
+```
+
+**Match CI locally**
+
+```bash
+make pre-commit   # test + smoke + build
+make ci-local     # fmt, lint, tests, smoke (no Docker)
+```
+
+More examples (gunzip pipes, CloudTrail integration tests): **[TESTING.md](../TESTING.md)**.
+
+**In-cluster quick validation**
+
+- **`./scripts/k8s-once-slack-test.sh`** — pipe a fixture through **`--mode=once`** in a pod (see TESTING.md).
+- **`scripts/attack-sim/`** — real AWS APIs + CloudTrail delay; use a **lab account** only.
+
+---
+
+## 5. Where to implement a new log source (example: Azure / Microsoft Entra)
+
+Use this as a **checklist**, not exhaustive for every Azure product. Entra / Azure Monitor audit logs differ by export path (Event Hub, storage, Sentinel); adapt ingestion to how you deliver JSON to iota (SQS, file, etc.).
+
+| Layer | What to do |
+|-------|------------|
+| **Normalized event** | Prefer mapping into **`pkg/cloudtrail.Event`** (or a thin wrapper) so rules and dedupe stay consistent. |
+| **Parser** | Add **`internal/logprocessor/parsers/<source>.go`** implementing **`ParserInterface`**: `ParseLog(string) ([]*cloudtrail.Event, error)` and **`LogType() string`** (e.g. `Azure.EntraAudit`). Follow patterns in **`gcp_audit.go`** or **`okta.go`**. |
+| **Registration** | Wire the parser in **`internal/logprocessor/processor.go`** → **`getParsers()`** map keys must match **`LogType()`** strings. |
+| **Classifier** | The adaptive classifier tries parsers in priority order; weak heuristics should **fail fast** on wrong inputs so penalties stay meaningful. |
+| **Tests** | Add **`processor_*_fixtures_test.go`** (or parser unit tests) + JSONL under **`testdata/`**. |
+| **Rules** | Add Python rules under **`rules/<pack>/`** and document in the pack README. |
+| **OpenSpec** | Update **`openspec/specs/log-processing/spec.md`** (and **`detection-engine`** if rule contracts change); add **`openspec/changes/<id>/`** for non-trivial additions. |
+| **Ingestion** | If events arrive on **SQS** (e.g. Lambda forwarder), **`cmd/iota`** and **`internal/events`** already implement queue polling; ensure the **message body** is a line or JSON your parser accepts. |
+| **Kubernetes** | Base manifests in **`deployments/kubernetes/base`**; pinned overlays and image tags in **[iota-deployments](https://github.com/iota-corp/iota-deployments)**. |
+| **IAM / cloud** | Long-lived AWS IAM for queues/S3 is often in **[iota-infra](https://github.com/iota-corp/iota-infra)**; Azure-side resources are not in this repo—document them in OpenSpec or infra docs. |
+
+For **GCP** or **GitHub** shapes already in-tree, grep for **`GCP.AuditLog`** or **`GitHub.Audit`** and mirror structure.
+
+---
+
+## 6. Detection pipeline (CloudTrail / S3 → SQS)
 
 High level:
 
@@ -39,7 +134,7 @@ High level:
 
 ---
 
-## 3. Logs and metrics (what to grep for)
+## 7. Logs and metrics (what to grep for)
 
 - **Detections:** `cmd/iota/match_log.go` logs lines of the form
   **`detection: rule_id=… severity=… eventSource=… eventName=… title="…"`**
@@ -79,7 +174,7 @@ Use **[docs/detection-pipeline-checklist.md](detection-pipeline-checklist.md)** 
 
 ---
 
-## 4. Kubernetes and GitOps (`iota-deployments`)
+## 8. Kubernetes and GitOps (`iota-deployments`)
 
 The **`iota`** repo ships **base manifests** under **`deployments/kubernetes/base`**. Day-to-day cluster-specific values (image tag, queue URL, bucket, region, optional data lake) live in the separate **`iota-deployments`** repo (overlays such as **`clusters/homelab-prod`**, **`clusters/homelab-test`**, **`clusters/eks-lab`**). **homelab-test** uses ad-hoc image tags (default **`dev`**), not release **`v*.*.*`** bumps — see **`iota-deployments/docs/homelab-k3s.md`** (Test: ad-hoc dev images).
 
@@ -90,11 +185,12 @@ The **`iota`** repo ships **base manifests** under **`deployments/kubernetes/bas
 
 **Release automation:** Pushes that create **`v*.*.*`** tags can bump image tags in **`iota-deployments`** via **`IOTA_DEPLOYMENTS_TOKEN`** (see root **README** § releases & docker image).
 
+**AWS IAM / EKS / queues:** Often defined in **`iota-infra`**; homelab may use IAM users + keys in Secrets instead of IRSA. See **`iota-infra/README.md`** and **`iota-deployments/README.md`** for the split of responsibilities.
+
 ---
 
-## 5. Local testing and attack simulation
+## 9. Attack simulation (live AWS)
 
-- **Unit / integration:** `go test ./...` — see [TESTING.md](../TESTING.md) for real CloudTrail fixture tests and CLI examples.
 - **`scripts/attack-sim/attack-sim.sh`** — drives **real AWS API** activity (IAM user/role/S3 depending on mode), compares **CloudTrail** visibility to **iota Prometheus** counters.
   - **`ATTACK_SIM_MODE=minimal`** — IAM user create/delete only (fastest).
   - **`ATTACK_SIM_MODE=full`** — IAM + role + S3 (default).
@@ -103,13 +199,7 @@ The **`iota`** repo ships **base manifests** under **`deployments/kubernetes/bas
 
 ---
 
-## 6. OpenSpec and product docs
-
-Structured proposals and specs live under **`openspec/`** (see **`openspec/AGENTS.md`** for agents). Use them when changing behavior that affects multiple packages or external contracts.
-
----
-
-## 7. Parallels to [Substation](https://github.com/brexhq/substation) (pipeline mindset)
+## 10. Parallels to [Substation](https://github.com/brexhq/substation) (pipeline mindset)
 
 [Substation](https://github.com/brexhq/substation) is a Go toolkit for **routing, normalizing, and enriching** security and audit logs (similar in spirit to Logstash / Fluentd, AWS-native). Forks such as **[redteamtools/substation](https://github.com/redteamtools/substation)** track the same ideas. None of this is a dependency of iota; the README is a useful **reference for how to think about pipeline engineering** when you extend iota.
 
@@ -121,24 +211,26 @@ Structured proposals and specs live under **`openspec/`** (see **`openspec/AGENT
 | **Same behavior everywhere** (laptop, container, Lambda) | Aim for **parity** between **`--jsonl` / file modes** and **SQS mode** for parsing and detection outcomes; **`--mode=once`** with a local file may still use **`gunzip -c`** when your fixture is gzipped. |
 | **Target schemas** (ECS, OCSF, “bring your own”) | iota normalizes to internal **`ProcessedEvent`** / **`cloudtrail.Event`** shapes. If you export or integrate with other tools, **naming and field mapping** deserve the same explicit contract Substation gives ECS/OCSF examples. |
 | **Optional enrichment via external APIs** | Substation highlights affordable enrichment at scale. iota today is mostly **in-account batch detection**; future enrichment should stay **explicit in IAM and cost** (similar “least privilege + observable” posture as their Terraform stories). |
-| **Terraform / in-account deployment** | Substation ships modules; iota uses **`iota-deployments`** / infra repos. Same lesson: **reproducible infra**, secrets outside Git, least-privilege IAM. |
+| **Terraform / in-account deployment** | Substation ships modules; iota uses **`iota-deployments`** / **`iota-infra`**. Same lesson: **reproducible infra**, secrets outside Git, least-privilege IAM. |
 | **Dev environment consistency** (e.g. devcontainer in their CONTRIBUTING flow) | Optional for iota: a pinned **Go + Python** environment (Dockerfile, devcontainer, or `mise`/`asdf`) reduces “works on my machine” for rules and integration tests. |
 
 **Further reading:** Substation’s [README](https://github.com/brexhq/substation/blob/main/README.md) (routing examples, Jsonnet snippets, testing section). Use it for **patterns**, not as an implementation spec for iota.
 
 ---
 
-## 8. Quick reference — related documents
+## 11. Quick reference — related documents
 
 | Document | Use when |
 |----------|----------|
+| [CLAUDE.md](../CLAUDE.md) | Short agent entry point and doc index. |
 | [detection-pipeline-checklist.md](detection-pipeline-checklist.md) | Tuning SQS behavior, latency expectations, observability checklist. |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Data flow, components, data lake layout. |
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Operational issues. |
 | [breaking-changes.md](breaking-changes.md) | Releases and API expectations. |
-| `iota-deployments/docs/homelab-k3s.md` | Homelab k3s, Tailscale, Argo, Grafana/Ingress. |
 | [TESTING.md](../TESTING.md) | CLI examples, gunzip pipes, integration tests. |
+| `iota-deployments/docs/homelab-k3s.md` | Homelab k3s, Tailscale, Argo, Grafana/Ingress. |
+| `iota-deployments/README.md` | How **iota** / **iota-deployments** / **iota-infra** relate. |
 
 ---
 
-*Keep this file accurate when you change defaults in **`cmd/iota/sqs_handler.go`**, deployment args, or the detection checklist. Refresh §7 if iota’s pipeline stages or testing story changes materially.*
+*Keep this file accurate when you change defaults in **`cmd/iota/sqs_handler.go`**, deployment args, or the detection checklist. Refresh §10 if iota’s pipeline stages or testing story changes materially.*
