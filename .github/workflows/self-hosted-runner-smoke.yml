@@ -17,6 +17,14 @@ jobs:
     name: Verify runner
     runs-on: [self-hosted, beelink]
     steps:
+      - name: Unstick workspace before checkout (self-hosted)
+        if: runner.environment == 'self-hosted'
+        run: |
+          set -euo pipefail
+          if [[ -z "${GITHUB_WORKSPACE:-}" || ! -d "${GITHUB_WORKSPACE}" ]]; then exit 0; fi
+          sudo rm -rf "${GITHUB_WORKSPACE}/.gomodcache" "${GITHUB_WORKSPACE}/.gocache" || true
+          sudo chown -R "$(id -u):$(id -g)" "${GITHUB_WORKSPACE}" || true
+
       - uses: actions/checkout@v4
 
       - name: Host and runner
