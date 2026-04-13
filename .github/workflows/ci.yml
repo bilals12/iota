@@ -114,13 +114,14 @@ jobs:
           # Use engine BuildKit instead of pulling moby/buildkit:buildx-stable-1 (often hits bad auth).
           driver: docker
 
-      # GHA cache: persist BuildKit layers (base images, apt archives) between CI runs on the same pool.
+      # GHA cache: persist BuildKit layers between CI runs. host network avoids bridge/MTU issues to debian mirrors in DinD.
       - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: false
           load: true
+          network: host
           tags: iota:test
           cache-from: type=gha
           cache-to: type=gha,mode=max

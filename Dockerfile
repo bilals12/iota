@@ -6,14 +6,22 @@
 #   docker build --platform linux/amd64 -t <image:tag> .
 FROM golang:1.25-bookworm AS builder
 
-# DinD/k8s often hit slow IPv6 to deb.debian.org (apt retries ~30s per index). Force IPv4.
-# Cache mounts speed repeat builds (same runner / BuildKit layer cache).
+# DinD/k8s: HTTP to deb.debian.org often stalls (MTU/NAT); HTTPS + host network (see ci.yml) is reliable.
+# Cache mounts speed repeat builds on the same BuildKit instance.
 # hadolint ignore=DL3008
 RUN --mount=type=cache,target=/var/cache/apt,id=apt-arch-builder \
     --mount=type=cache,target=/var/lib/apt/lists,id=apt-lists-builder \
     set -eux; \
-    printf 'Acquire::ForceIPv4 "true";\n' >/etc/apt/apt.conf.d/99force-ipv4; \
-    apt-get update; \
+    for f in /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list; do \
+      [ -f "$f" ] || continue; \
+      sed -i 's|http://deb.debian.org|https://deb.debian.org|g; s|http://security.debian.org|https://security.debian.org|g' "$f"; \
+    done; \
+    printf '%s\n' \
+      'Acquire::ForceIPv4 "true";' \
+      'Acquire::Retries "5";' \
+      'Acquire::https::Verify-Peer "true";' \
+      >/etc/apt/apt.conf.d/99docker-ci; \
+    apt-get update -o APT::Update::Error-Mode=any; \
     apt-get install -y --no-install-recommends \
       gcc g++ libc6-dev libsqlite3-dev python3; \
     rm -rf /var/lib/apt/lists/*
@@ -33,8 +41,16 @@ FROM debian:bookworm-slim
 RUN --mount=type=cache,target=/var/cache/apt,id=apt-arch-runtime \
     --mount=type=cache,target=/var/lib/apt/lists,id=apt-lists-runtime \
     set -eux; \
-    printf 'Acquire::ForceIPv4 "true";\n' >/etc/apt/apt.conf.d/99force-ipv4; \
-    apt-get update; \
+    for f in /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list; do \
+      [ -f "$f" ] || continue; \
+      sed -i 's|http://deb.debian.org|https://deb.debian.org|g; s|http://security.debian.org|https://security.debian.org|g' "$f"; \
+    done; \
+    printf '%s\n' \
+      'Acquire::ForceIPv4 "true";' \
+      'Acquire::Retries "5";' \
+      'Acquire::https::Verify-Peer "true";' \
+      >/etc/apt/apt.conf.d/99docker-ci; \
+    apt-get update -o APT::Update::Error-Mode=any; \
     apt-get install -y --no-install-recommends \
       python3 ca-certificates libsqlite3-0 libstdc++6; \
     rm -rf /var/lib/apt/lists/*
