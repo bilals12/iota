@@ -114,7 +114,7 @@ jobs:
           # Use engine BuildKit instead of pulling moby/buildkit:buildx-stable-1 (often hits bad auth).
           driver: docker
 
-      # GHA cache-to type=gha requires the docker-container driver; we use `driver: docker` (see above).
+      # GHA cache: persist BuildKit layers (base images, apt archives) between CI runs on the same pool.
       - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
@@ -122,3 +122,5 @@ jobs:
           push: false
           load: true
           tags: iota:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

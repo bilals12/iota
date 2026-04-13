@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # go-duckdb ships a glibc-linked libduckdb.a; musl (Alpine) cannot link it. Use Debian (glibc).
 #
 # EKS managed nodes are usually linux/amd64. Building on Apple Silicon defaults to arm64 and
@@ -5,10 +6,17 @@
 #   docker build --platform linux/amd64 -t <image:tag> .
 FROM golang:1.25-bookworm AS builder
 
+# DinD/k8s often hit slow IPv6 to deb.debian.org (apt retries ~30s per index). Force IPv4.
+# Cache mounts speed repeat builds (same runner / BuildKit layer cache).
 # hadolint ignore=DL3008
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc g++ libc6-dev libsqlite3-dev python3 \
-    && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/var/cache/apt,id=apt-arch-builder \
+    --mount=type=cache,target=/var/lib/apt/lists,id=apt-lists-builder \
+    set -eux; \
+    printf 'Acquire::ForceIPv4 "true";\n' >/etc/apt/apt.conf.d/99force-ipv4; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      gcc g++ libc6-dev libsqlite3-dev python3; \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
 
@@ -22,9 +30,14 @@ RUN CGO_ENABLED=1 go build -o iota ./cmd/iota
 FROM debian:bookworm-slim
 
 # hadolint ignore=DL3008
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 ca-certificates libsqlite3-0 libstdc++6 \
-    && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/var/cache/apt,id=apt-arch-runtime \
+    --mount=type=cache,target=/var/lib/apt/lists,id=apt-lists-runtime \
+    set -eux; \
+    printf 'Acquire::ForceIPv4 "true";\n' >/etc/apt/apt.conf.d/99force-ipv4; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      python3 ca-certificates libsqlite3-0 libstdc++6; \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
