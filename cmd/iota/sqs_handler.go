@@ -130,6 +130,7 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 	} else {
 		processor = logprocessor.New()
 	}
+	processor.SetClassifyWorkers(processWorkers)
 
 	dedup, err := deduplication.New(stateFile)
 	if err != nil {

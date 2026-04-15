@@ -177,7 +177,7 @@ func run() error {
 		bloomExpectedItems = flag.Uint64("bloom-expected-items", 10000000, "expected number of items for bloom filter")
 		bloomFalsePositive = flag.Float64("bloom-false-positive", 0.001, "false positive rate for bloom filter (0.0-1.0)")
 		downloadWorkers    = flag.Int("download-workers", 5, "sqs mode: max parallel S3 object handlers when one notification has multiple Records")
-		processWorkers     = flag.Int("process-workers", 10, "reserved; not wired yet (future parallel log processing)")
+		processWorkers     = flag.Int("process-workers", 1, "parallel JSON record classifiers for S3/EventBridge batched arrays and CloudTrail Records (1–32); each worker has its own adaptive parser state; line-delimited logs stay sequential")
 		glueDatabase       = flag.String("glue-database", "", "Glue database name for data catalog (optional)")
 		athenaWorkgroup    = flag.String("athena-workgroup", "primary", "Athena workgroup for queries")
 		athenaResultBucket = flag.String("athena-result-bucket", "", "S3 bucket for Athena query results (optional)")
@@ -222,7 +222,7 @@ func run() error {
 			}
 		}()
 		if otelCfg.Enabled {
-			log.Printf("telemetry enabled: endpoint=%s", otelCfg.Endpoint)
+			log.Printf("telemetry enabled: endpoint=%s sample_rate=%.4f", otelCfg.Endpoint, otelCfg.SampleRate)
 		}
 	}
 
@@ -273,7 +273,7 @@ func run() error {
 				log.Printf("health server error: %v", err)
 			}
 		}()
-		return runEventBridge(ctx, *sqsQueueURL, *awsRegion, *rulesDir, *python, *enginePy, *stateFile, *dataLakeBucket, *bloomFile, *bloomExpectedItems, *bloomFalsePositive, *glueDatabase, *athenaWorkgroup, *athenaResultBucket, slackClient)
+		return runEventBridge(ctx, *sqsQueueURL, *awsRegion, *rulesDir, *python, *enginePy, *stateFile, *dataLakeBucket, *bloomFile, *bloomExpectedItems, *bloomFalsePositive, *processWorkers, *glueDatabase, *athenaWorkgroup, *athenaResultBucket, slackClient)
 	case "audit-tail":
 		healthPort := os.Getenv("HEALTH_PORT")
 		if healthPort == "" {

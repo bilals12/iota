@@ -44,3 +44,5 @@ Narrowing `--rules` to a single pack or symlinked subtree still reduces Python w
 - **Line scanner:** Up to **10 MiB** per line in line-delimited mode (avoids default 64 KiB `bufio.Scanner` limit).
 - **Data lake async flush (optional):** **`IOTA_DATALAKE_ASYNC_FLUSH=1`** moves S3/Glue upload off the synchronous `WriteEvent` path after a buffer is sealed; bounded queue (**`IOTA_DATALAKE_FLUSH_QUEUE_DEPTH`**, default 4). **`Flush()`** must run on shutdown so the worker drains (same as before). Prometheus: **`iota_datalake_async_flush_queue_depth`**.
 - **SQLite:** `MaxOpenConns(1)` on dedup and state DBs; **`sync.RWMutex`** serializes API usage per store to reduce lock churn with parallel SQS workers.
+- **`--process-workers`:** Parallel JSON record classification for batched shapes (default **`1`**). Not used for line-delimited JSONL (adaptive parser priority learning stays single-threaded there).
+- **OTel trace sampling:** Set **`OTEL_TRACES_SAMPLER_ARG`** (e.g. `0.1`) or **`IOTA_OTEL_TRACE_SAMPLE_RATIO`** to reduce span volume; startup log shows `sample_rate`. Uses parent-based ratio sampling when `0 < rate < 1`.

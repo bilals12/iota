@@ -12,6 +12,7 @@ import (
 	"github.com/bilals12/iota/internal/bloom"
 	"github.com/bilals12/iota/internal/logprocessor/parsers"
 	"github.com/bilals12/iota/pkg/cloudtrail"
+	"golang.org/x/sync/errgroup"
 )
 
 // maxScanTokenSize is the maximum line length for bufio.Scanner in line-delimited mode.
@@ -21,6 +22,11 @@ const maxScanTokenSize = 10 * 1024 * 1024
 type Processor struct {
 	adaptiveClassifier *AdaptiveClassifier
 	bloomFilter        *bloom.Filter
+	// classifyWorkers is the number of parallel classifiers for batched JSON (Records / arrays).
+	// Each worker uses its own AdaptiveClassifier; bloom filter stays shared (mutex-safe).
+	// Line-delimited parsing stays sequential so adaptive parser priorities stay consistent.
+	// 0 means unset (treated as 1).
+	classifyWorkers int
 }
 
 type ProcessedEvent struct {
@@ -43,6 +49,35 @@ func NewWithBloomFilter(bloomFilter *bloom.Filter) *Processor {
 	return &Processor{
 		adaptiveClassifier: NewAdaptiveClassifier(parserMap),
 		bloomFilter:        bloomFilter,
+	}
+}
+
+// SetClassifyWorkers sets parallel record classifiers for S3 JSON batches (root arrays and
+// CloudTrail Records). Values below 1 are treated as 1; above 32 are capped at 32.
+// Does not apply to line-delimited or single-line JSONL parsing (adaptive state is sequential there).
+func (p *Processor) SetClassifyWorkers(n int) {
+	if n < 1 {
+		p.classifyWorkers = 1
+		return
+	}
+	if n > 32 {
+		n = 32
+	}
+	p.classifyWorkers = n
+}
+
+func (p *Processor) workerCount() int {
+	if p.classifyWorkers < 1 {
+		return 1
+	}
+	return p.classifyWorkers
+}
+
+func newProcessorForParallelClassify(bloom *bloom.Filter) *Processor {
+	parserMap := getParsers()
+	return &Processor{
+		adaptiveClassifier: NewAdaptiveClassifier(parserMap),
+		bloomFilter:        bloom,
 	}
 }
 
@@ -135,6 +170,14 @@ func (p *Processor) processReader(ctx context.Context, reader io.Reader, events 
 }
 
 func (p *Processor) processJSONArrayStream(ctx context.Context, r io.Reader, events chan<- *ProcessedEvent) error {
+	w := p.workerCount()
+	if w <= 1 {
+		return p.processJSONArrayStreamSequential(ctx, r, events)
+	}
+	return p.processJSONArrayStreamParallel(ctx, r, events, w)
+}
+
+func (p *Processor) processJSONArrayStreamSequential(ctx context.Context, r io.Reader, events chan<- *ProcessedEvent) error {
 	dec := json.NewDecoder(r)
 	tok, err := dec.Token()
 	if err != nil {
@@ -157,6 +200,59 @@ func (p *Processor) processJSONArrayStream(ctx context.Context, r io.Reader, eve
 		return fmt.Errorf("json: %w", err)
 	}
 	return nil
+}
+
+func (p *Processor) processJSONArrayStreamParallel(ctx context.Context, r io.Reader, events chan<- *ProcessedEvent, workers int) error {
+	dec := json.NewDecoder(r)
+	tok, err := dec.Token()
+	if err != nil {
+		return fmt.Errorf("json: %w", err)
+	}
+	d, ok := tok.(json.Delim)
+	if !ok || d != '[' {
+		return fmt.Errorf("expected JSON array")
+	}
+	if err := p.processJSONArrayBodyFromDecoderParallel(ctx, dec, events, workers); err != nil {
+		return err
+	}
+	if _, err := dec.Token(); err != nil {
+		return fmt.Errorf("json: %w", err)
+	}
+	return nil
+}
+
+// processJSONArrayBodyFromDecoderParallel decodes the remainder of a JSON array using parallel
+// classifiers. The decoder must be positioned after the opening '['.
+func (p *Processor) processJSONArrayBodyFromDecoderParallel(ctx context.Context, dec *json.Decoder, events chan<- *ProcessedEvent, workers int) error {
+	jobs := make(chan json.RawMessage, workers*4)
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		defer close(jobs)
+		for dec.More() {
+			var raw json.RawMessage
+			if err := dec.Decode(&raw); err != nil {
+				return fmt.Errorf("decode array element: %w", err)
+			}
+			select {
+			case jobs <- raw:
+			case <-gctx.Done():
+				return gctx.Err()
+			}
+		}
+		return nil
+	})
+	for range workers {
+		g.Go(func() error {
+			sub := newProcessorForParallelClassify(p.bloomFilter)
+			for raw := range jobs {
+				if err := sub.processCloudTrailRecord(gctx, raw, events); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}
+	return g.Wait()
 }
 
 func (p *Processor) processRecordsObjectStream(ctx context.Context, r io.Reader, events chan<- *ProcessedEvent) error {
@@ -187,12 +283,19 @@ func (p *Processor) processRecordsObjectStream(ctx context.Context, r io.Reader,
 			if !ok || d2 != '[' {
 				return fmt.Errorf("records must be a JSON array")
 			}
-			for dec.More() {
-				var raw json.RawMessage
-				if err := dec.Decode(&raw); err != nil {
-					return fmt.Errorf("decode Records element: %w", err)
+			w := p.workerCount()
+			if w <= 1 {
+				for dec.More() {
+					var raw json.RawMessage
+					if err := dec.Decode(&raw); err != nil {
+						return fmt.Errorf("decode Records element: %w", err)
+					}
+					if err := p.processCloudTrailRecord(ctx, raw, events); err != nil {
+						return err
+					}
 				}
-				if err := p.processCloudTrailRecord(ctx, raw, events); err != nil {
+			} else {
+				if err := p.processJSONArrayBodyFromDecoderParallel(ctx, dec, events, w); err != nil {
 					return err
 				}
 			}
@@ -225,12 +328,41 @@ func (p *Processor) processRecordsObjectStream(ctx context.Context, r io.Reader,
 }
 
 func (p *Processor) processCloudTrailRecords(ctx context.Context, records []json.RawMessage, events chan<- *ProcessedEvent) error {
-	for _, recordBytes := range records {
-		if err := p.processCloudTrailRecord(ctx, recordBytes, events); err != nil {
-			return err
+	w := p.workerCount()
+	if w <= 1 || len(records) < w*2 {
+		for _, recordBytes := range records {
+			if err := p.processCloudTrailRecord(ctx, recordBytes, events); err != nil {
+				return err
+			}
 		}
+		return nil
 	}
-	return nil
+
+	jobs := make(chan json.RawMessage, w*2)
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		defer close(jobs)
+		for _, r := range records {
+			select {
+			case jobs <- r:
+			case <-gctx.Done():
+				return gctx.Err()
+			}
+		}
+		return nil
+	})
+	for range w {
+		g.Go(func() error {
+			sub := newProcessorForParallelClassify(p.bloomFilter)
+			for raw := range jobs {
+				if err := sub.processCloudTrailRecord(gctx, raw, events); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}
+	return g.Wait()
 }
 
 func (p *Processor) processCloudTrailRecord(ctx context.Context, recordBytes json.RawMessage, events chan<- *ProcessedEvent) error {
