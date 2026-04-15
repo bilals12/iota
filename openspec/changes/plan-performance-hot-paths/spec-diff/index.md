@@ -20,3 +20,8 @@ Manual summary for review (regenerate with `/openspec-spec-diff` if the project 
 - **`openspec/specs/performance/spec.md`:** Current implementation notes for async data lake flush and SQLite pool + mutexes.
 - **`docs/PERFORMANCE-ROADMAP.md`:** Env vars `IOTA_DATALAKE_ASYNC_FLUSH`, queue depth, metrics.
 - **Code:** `internal/datalake/writer.go`, `internal/deduplication/deduplicator.go`, `internal/state/state.go`, `internal/sqliteutil/dsn.go`, `internal/metrics/metrics.go`.
+
+## Follow-up (P3 implementation)
+
+- **`--process-workers`:** `internal/logprocessor` parallel classify for batched JSON; default `1`; `internal/logprocessor/processor_workers_test.go`.
+- **OTel:** `internal/telemetry` parent-based ratio sampling; `internal/telemetry/telemetry_test.go`.

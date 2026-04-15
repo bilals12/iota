@@ -84,11 +84,11 @@ The system SHOULD document and, where safe, implement parallelism for `Process()
 
 #### Scenario: Process workers flag
 
-- **GIVEN** `--process-workers` or equivalent configuration
-- **WHEN** enabled
-- **THEN** behavior SHALL be documented (including parser/thread-safety constraints and interaction with the Python engine)
+- **GIVEN** `--process-workers` between 1 and 32
+- **WHEN** ingesting batched JSON (S3 `logprocessor.Process` paths)
+- **THEN** that many isolated `AdaptiveClassifier` instances MAY classify records in parallel; shared bloom filter remains thread-safe; line-delimited parsing remains sequential; Python `engine.Analyze` is unchanged (still one batch per object)
 
-**Reference:** `cmd/iota/sqs_handler.go`, CLI help
+**Reference:** `cmd/iota/sqs_handler.go`, `cmd/iota/eventbridge_handler.go`, `internal/logprocessor/processor.go`
 
 ### Requirement: Observability overhead at scale
 
@@ -98,7 +98,7 @@ When OpenTelemetry tracing is enabled, deployments SHOULD be able to reduce span
 
 - **GIVEN** production-like event rates
 - **WHEN** tracing is on
-- **THEN** operators SHOULD have a documented way to configure head- or tail-based sampling appropriate to their environment
+- **THEN** operators SHOULD configure sampling via `OTEL_TRACES_SAMPLER_ARG` or `IOTA_OTEL_TRACE_SAMPLE_RATIO` (documented in `docs/PERFORMANCE-ROADMAP.md`); parent-based ratio sampling applies for rates between 0 and 1
 
 ## Current implementation (baseline)
 
@@ -107,5 +107,7 @@ When OpenTelemetry tracing is enabled, deployments SHOULD be able to reduce span
 - **Line scanner:** Line mode allows up to 10 MiB tokens via `Scanner.Buffer`.
 - **Data lake:** Optional async flush via `IOTA_DATALAKE_ASYNC_FLUSH`; writer mutex protects the buffer; `Flush` drains async work.
 - **SQLite:** `internal/sqliteutil.ConfigureConnectionPool`; `internal/deduplication` and `internal/state` use `RWMutex` around DB access.
+- **Process workers:** `--process-workers` + `Processor.SetClassifyWorkers` for parallel batched classification; see CLI help.
+- **OTel sampling:** `internal/telemetry` reads `OTEL_TRACES_SAMPLER_ARG` / `IOTA_OTEL_TRACE_SAMPLE_RATIO`.
 - **Bloom filter:** `internal/bloom/bloom.go` uses `RWMutex` for concurrent readers; no change required for basic concurrency.
 - **Measured baselines:** See `openspec/project.md` (Performance Characteristics) and `docs/PERFORMANCE-ROADMAP.md`.

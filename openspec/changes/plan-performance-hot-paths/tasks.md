@@ -26,8 +26,8 @@
 
 ### P3 — Operations and observability
 
-- [ ] **`--process-workers`:** Document and implement safe parallelism inside `Process()` per parser/engine constraints. **Verify:** race detector / documented limitations in CLI help.
-- [ ] **OTel sampling:** Document and expose sampling configuration for high-QPS deployments. **Verify:** span rate drops as expected when sampling enabled.
+- [x] **`--process-workers`:** Default `1`. Values `1–32` set parallel classifiers for batched JSON (root arrays, streaming `Records`, buffered `Records` when `len ≥ 2×workers`); each worker uses `NewAdaptiveClassifier` + shared bloom; line-delimited parsing stays sequential. Wired in `sqs` and `eventbridge`. **Verify:** `internal/logprocessor/processor_workers_test.go`; `go test -race ./...`.
+- [x] **OTel sampling:** `OTEL_TRACES_SAMPLER_ARG` or `IOTA_OTEL_TRACE_SAMPLE_RATIO` (`0`–`1`); `ParentBased(TraceIDRatioBased)` when `0 < rate < 1`. Logged at startup with `sample_rate`. **Verify:** `internal/telemetry/telemetry_test.go`.
 
 ### Baseline / no code change
 
