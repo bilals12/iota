@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/bilals12/iota/internal/metrics"
+	"github.com/bilals12/iota/internal/sqliteutil"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -29,7 +30,7 @@ type AlertInfo struct {
 }
 
 func New(stateFile string) (*Deduplicator, error) {
-	db, err := sql.Open("sqlite3", stateFile)
+	db, err := sql.Open("sqlite3", sqliteutil.FileURI(stateFile))
 	if err != nil {
 		return nil, fmt.Errorf("open dedup db: %w", err)
 	}
