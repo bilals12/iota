@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/bilals12/iota/internal/metrics"
+	"github.com/bilals12/iota/internal/sqliteutil"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -26,7 +27,7 @@ type DB struct {
 }
 
 func Open(path string) (*DB, error) {
-	db, err := sql.Open("sqlite3", path)
+	db, err := sql.Open("sqlite3", sqliteutil.FileURI(path))
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}

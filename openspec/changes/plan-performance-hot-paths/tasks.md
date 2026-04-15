@@ -1,0 +1,40 @@
+# Tasks: plan-performance-hot-paths
+
+## Documentation and specs (this change)
+
+- [x] Add `openspec/specs/performance/spec.md` (roadmap SHOULD/MAY requirements).
+- [x] Add `openspec/changes/plan-performance-hot-paths/` (`proposal.md`, `tasks.md`, `design.md`, `spec-diff/index.md`).
+- [x] Add `docs/PERFORMANCE-ROADMAP.md` (audit summary, links, verification).
+- [x] Link from `openspec/project.md` to the roadmap doc and this change id.
+
+## Implementation backlog (unchecked — develop in separate PRs)
+
+### P0 — Rule evaluation amortization
+
+- [x] **Long-lived Python worker (or equivalent):** Default path uses `python engines/iota/engine.py worker` with length-prefixed JSON frames; rules load once per worker; `Engine.Close()` stops the subprocess. Set `IOTA_ENGINE_ONESHOT=1` to restore one process per `Analyze` (debug). **Verify:** `internal/engine/engine_test.go`; `go test ./...`.
+- [ ] **Rule indexing / filtering:** Reduce O(events × all rules) in Python without changing rule semantics (e.g. by `rules/{log_type}/` or manifest). **Verify:** unit tests that only matching rules run for a log type; regression on rule count × latency.
+
+### P1 — Ingest memory
+
+- [x] **Streaming CloudTrail (and similar) parse:** Root JSON array and `{"Records":[...]}` (when `"Records":[` appears in the first 1 KiB) stream via `json.Decoder` without `ReadAll` of the full file; other shapes fall back to buffered path. **Verify:** existing `internal/logprocessor` tests; profile large fixtures as follow-up.
+- [x] **Scanner buffer policy:** `processLineByLine` uses `Scanner.Buffer` with max token 10 MiB. **Verify:** extend with an oversized-line test if needed.
+
+### P2 — Async / contention
+
+- [ ] **Data lake async flush (optional):** After baseline metrics, optional bounded async flush from `internal/datalake/writer.go`; metrics for lag and failures. **Verify:** load test; no silent data loss; Glue/S3 errors surfaced.
+- [ ] **SQLite single-writer or batching:** Measure contention with N concurrent handlers; implement queue or batch writes for dedup/state if needed. **Verify:** stress test with parallel workers; p99 latency stable.
+
+### P3 — Operations and observability
+
+- [ ] **`--process-workers`:** Document and implement safe parallelism inside `Process()` per parser/engine constraints. **Verify:** race detector / documented limitations in CLI help.
+- [ ] **OTel sampling:** Document and expose sampling configuration for high-QPS deployments. **Verify:** span rate drops as expected when sampling enabled.
+
+### Baseline / no code change
+
+- [x] **Bloom filter concurrency:** `internal/bloom/bloom.go` already uses `RWMutex`; no task unless profiling shows lock churn.
+
+## Archive
+
+When the backlog above is either completed or superseded, archive this change:
+
+`openspec archive plan-performance-hot-paths --skip-specs --yes` (after updating `tasks.md` and any spec follow-ups).

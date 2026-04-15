@@ -14,6 +14,10 @@ import (
 	"github.com/bilals12/iota/pkg/cloudtrail"
 )
 
+// maxScanTokenSize is the maximum line length for bufio.Scanner in line-delimited mode.
+// Default bufio.MaxScanTokenSize is 64 KiB; long JSON lines (e.g. embedded blobs) can exceed it.
+const maxScanTokenSize = 10 * 1024 * 1024
+
 type Processor struct {
 	adaptiveClassifier *AdaptiveClassifier
 	bloomFilter        *bloom.Filter
@@ -84,7 +88,32 @@ func (p *Processor) Process(ctx context.Context, reader io.Reader) (<-chan *Proc
 }
 
 func (p *Processor) processReader(ctx context.Context, reader io.Reader, events chan<- *ProcessedEvent) error {
-	data, err := io.ReadAll(reader)
+	br := bufio.NewReaderSize(reader, 256*1024)
+	head, err := br.Peek(8192)
+	if err != nil && err != io.EOF {
+		return fmt.Errorf("peek: %w", err)
+	}
+	if len(head) == 0 && err == io.EOF {
+		return nil
+	}
+	trim := bytes.TrimSpace(head)
+	if len(trim) == 0 {
+		data, rerr := io.ReadAll(br)
+		if rerr != nil {
+			return fmt.Errorf("read data: %w", rerr)
+		}
+		return p.processLineByLine(ctx, data, events)
+	}
+	if trim[0] == '[' {
+		return p.processJSONArrayStream(ctx, br, events)
+	}
+	if trim[0] == '{' {
+		lim := min(1024, len(trim))
+		if bytes.Contains(trim[:lim], []byte(`"Records":[`)) || bytes.Contains(trim[:lim], []byte(`"Records": [`)) {
+			return p.processRecordsObjectStream(ctx, br, events)
+		}
+	}
+	data, err := io.ReadAll(br)
 	if err != nil {
 		return fmt.Errorf("read data: %w", err)
 	}
@@ -105,41 +134,138 @@ func (p *Processor) processReader(ctx context.Context, reader io.Reader, events 
 	return p.processLineByLine(ctx, data, events)
 }
 
+func (p *Processor) processJSONArrayStream(ctx context.Context, r io.Reader, events chan<- *ProcessedEvent) error {
+	dec := json.NewDecoder(r)
+	tok, err := dec.Token()
+	if err != nil {
+		return fmt.Errorf("json: %w", err)
+	}
+	d, ok := tok.(json.Delim)
+	if !ok || d != '[' {
+		return fmt.Errorf("expected JSON array")
+	}
+	for dec.More() {
+		var raw json.RawMessage
+		if err := dec.Decode(&raw); err != nil {
+			return fmt.Errorf("decode array element: %w", err)
+		}
+		if err := p.processCloudTrailRecord(ctx, raw, events); err != nil {
+			return err
+		}
+	}
+	if _, err := dec.Token(); err != nil {
+		return fmt.Errorf("json: %w", err)
+	}
+	return nil
+}
+
+func (p *Processor) processRecordsObjectStream(ctx context.Context, r io.Reader, events chan<- *ProcessedEvent) error {
+	dec := json.NewDecoder(r)
+	tok, err := dec.Token()
+	if err != nil {
+		return fmt.Errorf("json: %w", err)
+	}
+	d, ok := tok.(json.Delim)
+	if !ok || d != '{' {
+		return fmt.Errorf("expected JSON object")
+	}
+	for dec.More() {
+		t, err := dec.Token()
+		if err != nil {
+			return fmt.Errorf("json: %w", err)
+		}
+		key, ok := t.(string)
+		if !ok {
+			return fmt.Errorf("expected object key")
+		}
+		if key == "Records" {
+			t2, err := dec.Token()
+			if err != nil {
+				return fmt.Errorf("json: %w", err)
+			}
+			d2, ok := t2.(json.Delim)
+			if !ok || d2 != '[' {
+				return fmt.Errorf("records must be a JSON array")
+			}
+			for dec.More() {
+				var raw json.RawMessage
+				if err := dec.Decode(&raw); err != nil {
+					return fmt.Errorf("decode Records element: %w", err)
+				}
+				if err := p.processCloudTrailRecord(ctx, raw, events); err != nil {
+					return err
+				}
+			}
+			if _, err := dec.Token(); err != nil {
+				return fmt.Errorf("json: %w", err)
+			}
+			for dec.More() {
+				if _, err := dec.Token(); err != nil {
+					return fmt.Errorf("json: %w", err)
+				}
+				var discard json.RawMessage
+				if err := dec.Decode(&discard); err != nil {
+					return fmt.Errorf("json: %w", err)
+				}
+			}
+			if _, err := dec.Token(); err != nil {
+				return fmt.Errorf("json: %w", err)
+			}
+			return nil
+		}
+		var discard json.RawMessage
+		if err := dec.Decode(&discard); err != nil {
+			return fmt.Errorf("json: %w", err)
+		}
+	}
+	if _, err := dec.Token(); err != nil {
+		return fmt.Errorf("json: %w", err)
+	}
+	return nil
+}
+
 func (p *Processor) processCloudTrailRecords(ctx context.Context, records []json.RawMessage, events chan<- *ProcessedEvent) error {
 	for _, recordBytes := range records {
+		if err := p.processCloudTrailRecord(ctx, recordBytes, events); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *Processor) processCloudTrailRecord(ctx context.Context, recordBytes json.RawMessage, events chan<- *ProcessedEvent) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	result, err := p.adaptiveClassifier.Classify(string(recordBytes))
+	if err != nil {
+		return nil
+	}
+
+	for _, event := range result.Events {
+		if p.bloomFilter != nil {
+			if p.bloomFilter.Test([]byte(event.EventID)) {
+				continue
+			}
+			p.bloomFilter.Add([]byte(event.EventID))
+		}
+
+		now := time.Now()
+		processed := &ProcessedEvent{
+			Event:     event,
+			LogType:   result.LogType,
+			EventTime: event.EventTime,
+			ParseTime: now,
+			RowID:     generateRowID(event),
+		}
+
 		select {
+		case events <- processed:
 		case <-ctx.Done():
 			return ctx.Err()
-		default:
-		}
-
-		result, err := p.adaptiveClassifier.Classify(string(recordBytes))
-		if err != nil {
-			continue
-		}
-
-		for _, event := range result.Events {
-			if p.bloomFilter != nil {
-				if p.bloomFilter.Test([]byte(event.EventID)) {
-					continue
-				}
-				p.bloomFilter.Add([]byte(event.EventID))
-			}
-
-			now := time.Now()
-			processed := &ProcessedEvent{
-				Event:     event,
-				LogType:   result.LogType,
-				EventTime: event.EventTime,
-				ParseTime: now,
-				RowID:     generateRowID(event),
-			}
-
-			select {
-			case events <- processed:
-			case <-ctx.Done():
-				return ctx.Err()
-			}
 		}
 	}
 	return nil
@@ -147,6 +273,8 @@ func (p *Processor) processCloudTrailRecords(ctx context.Context, records []json
 
 func (p *Processor) processLineByLine(ctx context.Context, data []byte, events chan<- *ProcessedEvent) error {
 	scanner := bufio.NewScanner(bytes.NewReader(data))
+	buf := make([]byte, 0, bufio.MaxScanTokenSize)
+	scanner.Buffer(buf, maxScanTokenSize)
 	for scanner.Scan() {
 		select {
 		case <-ctx.Done():
