@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # go-duckdb ships a glibc-linked libduckdb.a; musl (Alpine) cannot link it. Use Debian (glibc).
 #
 # EKS managed nodes are usually linux/amd64. Building on Apple Silicon defaults to arm64 and
