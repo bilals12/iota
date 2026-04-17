@@ -116,6 +116,7 @@ The system SHALL provide Docker images for multiple architectures.
 ## Current Implementation
 
 - **Location**: `cmd/iota/main.go`, `cmd/iota/sqs_handler.go`, `cmd/iota/eventbridge_handler.go`
-- **Terraform**: `terraform/`
+- **Kubernetes manifests**: **[iota-deployments](https://github.com/iota-corp/iota-deployments)** (`base/`, `clusters/`, `examples/`) — not under `deployments/kubernetes/` in this repo
+- **Terraform**: `terraform/` (relocating to **iota-infra** is tracked in `docs/manifest-migration-checklist.md` Phase 2)
 - **Docker**: `Dockerfile`, `.github/workflows/`
 - **Health Server**: `internal/api/health.go`

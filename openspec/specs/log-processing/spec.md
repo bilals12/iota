@@ -149,7 +149,7 @@ The iota binary SHALL support a run mode that reads newline-delimited Kubernetes
 - **THEN** each line SHALL be classified like other JSONL sources
 - **AND** lines matching `Amazon.EKS.Audit` SHALL be evaluated by the rule engine and MAY emit Slack alerts like other long-running modes
 
-Homelab Kubernetes manifests for this mode live in the **`iota-deployments`** repo (`clusters/homelab-k3s-audit`), not under **`iota/deployments/kubernetes`**.
+Homelab Kubernetes manifests for this mode live in the **`iota-deployments`** repo (`clusters/homelab-k3s-audit`).
 
 ### Requirement: Slack audit log parsing
 

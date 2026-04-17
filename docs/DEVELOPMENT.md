@@ -14,7 +14,7 @@ This document is the **handbook for ongoing work** on iota: how to plan changes 
 | **`internal/engine`** | Python rules engine subprocess (`--python`, `--engine`, `--rules`). |
 | **`pkg/cloudtrail`** | Shared event shape and parsing helpers (many log types normalize into this model). |
 | **`rules/`** | Detection rules (Python + metadata); image copies under **`/app/rules`** (see `Dockerfile`). |
-| **`deployments/kubernetes`** | Base Deployment manifest; cluster overlays live in **iota-deployments**. |
+| **`deployments/kubernetes/README.md`** | Pointer only — canonical Kustomize **`base/`** and overlays live in **[iota-deployments](https://github.com/iota-corp/iota-deployments)**. |
 | **`scripts/attack-sim/`** | End-to-end-ish simulation against real AWS + Prometheus counters. |
 | **`openspec/`** | Structured specs and change proposals (see §2). |
 
@@ -126,7 +126,7 @@ Use this as a **checklist**, not exhaustive for every Azure product. Entra / Azu
 | **Rules** | Add Python rules under **`rules/<pack>/`** and document in the pack README. |
 | **OpenSpec** | Update **`openspec/specs/log-processing/spec.md`** (and **`detection-engine`** if rule contracts change); add **`openspec/changes/<id>/`** for non-trivial additions. |
 | **Ingestion** | If events arrive on **SQS** (e.g. Lambda forwarder), **`cmd/iota`** and **`internal/events`** already implement queue polling; ensure the **message body** is a line or JSON your parser accepts. |
-| **Kubernetes** | Base manifests in **`deployments/kubernetes/base`**; pinned overlays and image tags in **[iota-deployments](https://github.com/iota-corp/iota-deployments)**. |
+| **Kubernetes** | Canonical **`base/`** and **`clusters/`** in **[iota-deployments](https://github.com/iota-corp/iota-deployments)**; optional **`examples/`** starters. |
 | **IAM / cloud** | Long-lived AWS IAM for queues/S3 is often in **[iota-infra](https://github.com/iota-corp/iota-infra)**; Azure-side resources are not in this repo—document them in OpenSpec or infra docs. |
 
 For **GCP** or **GitHub** shapes already in-tree, grep for **`GCP.AuditLog`** or **`GitHub.Audit`** and mirror structure.
@@ -195,7 +195,9 @@ Use **[docs/detection-pipeline-checklist.md](detection-pipeline-checklist.md)** 
 
 ## 8. Kubernetes and GitOps (`iota-deployments`)
 
-The **`iota`** repo ships **base manifests** under **`deployments/kubernetes/base`**. Day-to-day cluster-specific values (image tag, queue URL, bucket, region, optional data lake) live in the separate **`iota-deployments`** repo (overlays such as **`clusters/homelab-prod`**, **`clusters/homelab-test`**, **`clusters/eks-lab`**). **homelab-test** / **homelab-k3s-audit** use **pinned** **`sha-<7>`** tags on **iota-deployments** branch **`develop`** (Argo), not release **`v*.*.*`** bumps — see **`iota-deployments/docs/git-branches.md`** and **`homelab-k3s.md`** (Test: dev images).
+**Canonical Kustomize base** and **cluster overlays** live in **`iota-deployments`** (`base/`, `clusters/<env>/`). Day-to-day per-cluster values (image tag, queue URL, bucket, region, optional data lake) are edited there. **homelab-test** / **homelab-k3s-audit** use **pinned** **`sha-<7>`** tags on **iota-deployments** branch **`develop`** (Argo), not release **`v*.*.*`** bumps — see **`iota-deployments/docs/git-branches.md`** and **`homelab-k3s.md`** (Test: dev images).
+
+**Manifest migration** (historical consolidation): **[manifest-migration-checklist.md](manifest-migration-checklist.md)**.
 
 **Homelab (k3s on Beelink, Tailscale):**
 

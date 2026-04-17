@@ -38,4 +38,8 @@ Use `[skip release]` in a commit subject to push to `main` without cutting a rel
 
 ## CLI default `--mode`
 
-The **`cmd/iota`** default **`--mode`** is **`eventbridge`** (aligned with low-latency CloudTrail API ingestion). Scripts or containers that relied on the previous default **`sqs`** must pass **`--mode=sqs`** explicitly. Kubernetes manifests in **iota** / **iota-deployments** that already set **`--mode=sqs`** in **`args`** are unchanged.
+The **`cmd/iota`** default **`--mode`** is **`eventbridge`** (aligned with low-latency CloudTrail API ingestion). Scripts or containers that relied on the previous default **`sqs`** must pass **`--mode=sqs`** explicitly. Kubernetes manifests in **iota-deployments** that already set **`--mode=sqs`** in **`args`** are unchanged.
+
+## Kubernetes manifest location
+
+The canonical Kustomize **base** and **overlays** live only in **[iota-deployments](https://github.com/iota-corp/iota-deployments)** (`base/`, `clusters/`, `examples/`). Paths under **`iota/deployments/kubernetes/`** (previously **`base/`** and **`overlays/`**) were removed; **`iota/deployments/kubernetes/README.md`** points to the deployments repo. Update bookmarks and automation that cloned manifest YAML from **iota** alone.

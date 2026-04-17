@@ -101,15 +101,15 @@ go build -o bin/iota ./cmd/iota
 
 ### related repositories
 
-| repo                                                                  | role                                                                |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| **[iota](https://github.com/iota-corp/iota)** (this repo)             | application, rules, `Dockerfile`, CI, `deployments/kubernetes/base` |
-| **[iota-deployments](https://github.com/iota-corp/iota-deployments)** | kustomize overlays per cluster, image tags, argo cd apps            |
-| **[iota-infra](https://github.com/iota-corp/iota-infra)**             | terraform: iam, eks, queues, etc. (environment-specific)            |
+| repo                                                                  | role                                                                    |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| **[iota](https://github.com/iota-corp/iota)** (this repo)             | application, rules, `Dockerfile`, CI                                    |
+| **[iota-deployments](https://github.com/iota-corp/iota-deployments)** | kustomize **base**, cluster overlays, **examples**, image tags, Argo CD |
+| **[iota-infra](https://github.com/iota-corp/iota-infra)**             | terraform: iam, eks, queues, etc. (environment-specific)                |
 
 ### deployment
 
-production manifests and per-cluster settings live in **iota-deployments** (kustomize overlays, secrets, queue urls). base kubernetes yaml is maintained in this repo under **`deployments/kubernetes/base`** and vendored/synced there—see **iota-deployments** `README.md`.
+production manifests and per-cluster settings live in **iota-deployments** (kustomize **base**, overlays, secrets, queue URLs). **`deployments/kubernetes/README.md`** in this repo only points there—do not duplicate workload YAML here.
 
 **compute:** eks, k3s, ecs, fargate, or ec2 · **permissions:** **sqs** receive/delete on the ingestion queue; **`--mode=sqs`** also needs **s3** get/list on the cloudtrail bucket (downloads **`.json.gz`** log files). **`--mode=eventbridge`** for cloudtrail **api** events ingests **json from sqs** (no per-detection s3 log file download) · **storage:** persistent disk for sqlite state/dedup
 
