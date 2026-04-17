@@ -43,3 +43,7 @@ The **`cmd/iota`** default **`--mode`** is **`eventbridge`** (aligned with low-l
 ## Kubernetes manifest location
 
 The canonical Kustomize **base** and **overlays** live only in **[iota-deployments](https://github.com/iota-corp/iota-deployments)** (`base/`, `clusters/`, `examples/`). Paths under **`iota/deployments/kubernetes/`** (previously **`base/`** and **`overlays/`**) were removed; **`iota/deployments/kubernetes/README.md`** points to the deployments repo. Update bookmarks and automation that cloned manifest YAML from **iota** alone.
+
+## Terraform EKS modules
+
+EKS-oriented Terraform (Helm release + IRSA, and the IAM-only submodule) lives under **[iota-infra](https://github.com/iota-corp/iota-infra)** **`modules/iota-eks-helm/`** and **`modules/iota-system-iam/`**. The **`iota/terraform/`** directory in this repo no longer contains `.tf` files — **`terraform/README.md`** points to **iota-infra**. Update any **`module` `source`** that referenced **`./terraform`** or **`git::...iota...//terraform`**.

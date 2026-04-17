@@ -28,10 +28,10 @@ Non-trivial behavior changes start with a **change id** under `openspec/changes/
 
 ## Related repos
 
-| Repo                                                                  | Role                                                                                                                                                    |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **iota** (here)                                                       | Application, parsers, rules, `Dockerfile`. K8s manifests: **[iota-deployments](https://github.com/iota-corp/iota-deployments)** (`base/`, `clusters/`). |
-| **[iota-deployments](https://github.com/iota-corp/iota-deployments)** | Kustomize overlays per cluster; image tags; Argo CD apps.                                                                                               |
-| **[iota-infra](https://github.com/iota-corp/iota-infra)**             | Terraform (IAM, EKS, queues, etc., depending on environment).                                                                                           |
+| Repo                                                                  | Role                                                                                                                                                                                                                                                |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **iota** (here)                                                       | Application, parsers, rules, `Dockerfile`. K8s: **[iota-deployments](https://github.com/iota-corp/iota-deployments)**. EKS Terraform modules: **[iota-infra](https://github.com/iota-corp/iota-infra)** `modules/` — see **`terraform/README.md`**. |
+| **[iota-deployments](https://github.com/iota-corp/iota-deployments)** | Kustomize overlays per cluster; image tags; Argo CD apps.                                                                                                                                                                                           |
+| **[iota-infra](https://github.com/iota-corp/iota-infra)**             | **`eks-lab/`** IAM; optional **`modules/`** (`iota-eks-helm`, `iota-system-iam`) for EKS.                                                                                                                                                           |
 
 Do not confuse **iota** (code) with **iota-deployments** (what runs where) or **iota-infra** (cloud IAM/topology).

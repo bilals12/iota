@@ -101,11 +101,11 @@ go build -o bin/iota ./cmd/iota
 
 ### related repositories
 
-| repo                                                                  | role                                                                    |
-| --------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| **[iota](https://github.com/iota-corp/iota)** (this repo)             | application, rules, `Dockerfile`, CI                                    |
-| **[iota-deployments](https://github.com/iota-corp/iota-deployments)** | kustomize **base**, cluster overlays, **examples**, image tags, Argo CD |
-| **[iota-infra](https://github.com/iota-corp/iota-infra)**             | terraform: iam, eks, queues, etc. (environment-specific)                |
+| repo                                                                  | role                                                                                                    |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| **[iota](https://github.com/iota-corp/iota)** (this repo)             | application, rules, `Dockerfile`, CI                                                                    |
+| **[iota-deployments](https://github.com/iota-corp/iota-deployments)** | kustomize **base**, cluster overlays, **examples**, image tags, Argo CD                                 |
+| **[iota-infra](https://github.com/iota-corp/iota-infra)**             | **`eks-lab/`** homelab IAM; optional **`modules/`** for EKS + Helm (`iota-eks-helm`, `iota-system-iam`) |
 
 ### deployment
 
